@@ -1,0 +1,62 @@
+@page "/Account/Register"
+@model BankingApp.API.Pages.Account.RegisterModel
+@{
+    ViewData["Title"] = "Înregistrare"; Layout = null;
+}
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Înregistrare - BudgetFlow</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="~/css/site.css">
+</head>
+<body>
+    <div class="auth-wrap">
+        <div class="auth-card">
+            <div class="auth-logo">
+                <div class="brand-gem"><i class="bi bi-wallet2"></i></div>
+                <span style="font-size:16px;font-weight:700;color:var(--text)">BudgetFlow</span>
+            </div>
+            <div class="auth-title">Creează cont 🚀</div>
+            <div class="auth-sub">Gratuit, rapid, fără comisioane</div>
+            <div id="regAlert"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                <div class="field"><label>Prenume</label><input type="text" id="firstName" placeholder="Ion"></div>
+                <div class="field"><label>Nume</label><input type="text" id="lastName" placeholder="Popescu"></div>
+            </div>
+            <div class="field"><label>Email</label><div class="inp-wrap"><i class="bi bi-envelope"></i><input type="email" id="email" placeholder="email@exemplu.ro"></div></div>
+            <div class="field"><label>Parolă</label><div class="inp-wrap"><i class="bi bi-lock"></i><input type="password" id="password" placeholder="Minim 6 caractere + cifră"></div></div>
+            <div class="field"><label>Confirmă parola</label><div class="inp-wrap"><i class="bi bi-lock-fill"></i><input type="password" id="confirmPassword" placeholder="Repetă parola"></div></div>
+            <button class="btn btn-primary btn-w mt-2" onclick="doRegister()" id="regBtn">
+                <i class="bi bi-person-check"></i> Creează cont gratuit
+            </button>
+            <div class="auth-footer">Ai deja cont? <a href="/Account/Login">Autentifică-te</a></div>
+        </div>
+    </div>
+    <script>
+        async function doRegister() {
+            const firstName = document.getElementById('firstName').value.trim();
+            const lastName = document.getElementById('lastName').value.trim();
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            const alertEl = document.getElementById('regAlert');
+            const btn = document.getElementById('regBtn');
+            if (!firstName || !lastName || !email || !password) { alertEl.innerHTML = '<div class="alert alert-danger">Completați toate câmpurile.</div>'; return; }
+            if (password !== confirmPassword) { alertEl.innerHTML = '<div class="alert alert-danger">Parolele nu coincid.</div>'; return; }
+            btn.disabled = true; btn.innerHTML = '<span class="spinner-sm"></span> Se creează contul...';
+            alertEl.innerHTML = '';
+            try {
+                const res = await fetch('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ firstName, lastName, email, password, confirmPassword }) });
+                const data = await res.json();
+                if (res.ok) { localStorage.setItem('authToken', data.token); localStorage.setItem('authUser', JSON.stringify(data)); window.location = '/Dashboard'; }
+                else { alertEl.innerHTML = `<div class="alert alert-danger">${data.message || 'Eroare.'}</div>`; }
+            } catch (e) { alertEl.innerHTML = '<div class="alert alert-danger">Eroare de conexiune.</div>'; }
+            finally { btn.disabled = false; btn.innerHTML = '<i class="bi bi-person-check"></i> Creează cont gratuit'; }
+        }
+    </script>
+</body>
+</html>

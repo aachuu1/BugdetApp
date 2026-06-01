@@ -1,0 +1,16 @@
+@page
+@model BankingApp.API.Pages.IndexModel
+@{ Layout = null; }
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>BudgetFlow</title></head>
+<body>
+<script>
+    if (localStorage.getItem('authToken')) {
+        window.location = '/Dashboard';
+    } else {
+        window.location = '/Account/Login';
+    }
+</script>
+</body>
+</html>

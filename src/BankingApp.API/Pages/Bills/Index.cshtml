@@ -1,0 +1,122 @@
+@page "/Bills"
+@model BankingApp.API.Pages.Bills.IndexModel
+@{
+    ViewData["Title"] = "Facturi";
+}
+
+<div class="page-shell">
+    <div class="page-hdr">
+        <div><h2>Facturi</h2><p>Gestionează și plătește facturile tale</p></div>
+        <button class="btn btn-primary btn-sm" onclick="document.getElementById('addBillModal').style.display='flex'">
+            <i class="bi bi-plus"></i> Factură nouă
+        </button>
+    </div>
+    <div id="billsContent"><div class="loading-center"><div class="spinner"></div></div></div>
+</div>
+
+<div id="addBillModal" style="display:none;" class="modal-backdrop" onclick="if(event.target===this)this.style.display='none'">
+    <div class="modal-box">
+        <div class="modal-hdr">
+            <h4><i class="bi bi-receipt" style="color:var(--purple-500)"></i> Factură nouă</h4>
+            <button class="btn-icon" onclick="document.getElementById('addBillModal').style.display='none'"><i class="bi bi-x"></i></button>
+        </div>
+        <div class="modal-body">
+            <div id="billAlert"></div>
+            <div class="field"><label>Nume *</label><div class="inp-wrap"><i class="bi bi-file-text"></i><input type="text" id="billName" placeholder="ex: Factură Electricitate"></div></div>
+            <div class="field"><label>Furnizor</label><div class="inp-wrap"><i class="bi bi-building"></i><input type="text" id="billProvider" placeholder="ex: Electrica"></div></div>
+            <div class="field"><label>Sumă (RON) *</label><div class="inp-wrap"><i class="bi bi-cash-coin"></i><input type="number" id="billAmount" placeholder="0.00" step="0.01"></div></div>
+            <div class="field"><label>Data scadentă *</label><input type="date" id="billDue"></div>
+            <div class="field"><label>Categorie</label><select id="billCat"><option value="0">Electricitate</option><option value="1">Apă</option><option value="2">Gaz</option><option value="3">Internet</option><option value="4">Telefon</option><option value="5">Chirie</option><option value="6">Asigurare</option><option value="7">Abonament</option><option value="8">Altele</option></select></div>
+            <div class="field"><label>Cont</label><select id="billAccount"></select></div>
+            <div class="field"><label>Notițe</label><textarea id="billNotes" rows="2"></textarea></div>
+        </div>
+        <div class="modal-ftr">
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('addBillModal').style.display='none'">Anulează</button>
+            <button class="btn btn-primary btn-sm" onclick="saveBill()"><i class="bi bi-save"></i> Salvează</button>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const billCatLabels = ['Electricitate','Apă','Gaz','Internet','Telefon','Chirie','Asigurare','Abonament','Altele'];
+        const billCatIcons = ['bi-lightning-charge','bi-droplet','bi-fire','bi-wifi','bi-phone','bi-house','bi-shield-check','bi-play-circle','bi-receipt'];
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            requireAuth();
+            document.getElementById('billDue').value = new Date(Date.now()+7*86400000).toISOString().split('T')[0];
+            const res = await authFetch('/api/accounts');
+            const accs = await res.json();
+            document.getElementById('billAccount').innerHTML = accs.map(a => `<option value="${a.id}">${a.accountName}</option>`).join('');
+            await loadBills();
+        });
+
+        async function loadBills() {
+            const res = await authFetch('/api/bills');
+            const bills = await res.json();
+            renderBills(bills);
+        }
+
+        function renderBills(bills) {
+            const c = document.getElementById('billsContent');
+            if (!bills.length) { c.innerHTML = '<div class="empty-state"><i class="bi bi-receipt-cutoff"></i><p>Nu ai facturi adăugate.</p></div>'; return; }
+            const overdue = bills.filter(b => b.isOverdue || b.status === 2);
+            const pending = bills.filter(b => b.status === 0 && !b.isOverdue);
+            const paid = bills.filter(b => b.status === 1);
+            let html = '';
+            if (overdue.length) html += section('urgent', 'bi-exclamation-triangle-fill', `Restante (${overdue.length})`, overdue);
+            if (pending.length) html += section('pending', 'bi-clock', 'În așteptare', pending);
+            if (paid.length) html += section('paid', 'bi-check-circle-fill', 'Plătite', paid);
+            c.innerHTML = html;
+        }
+
+        function section(cls, icon, title, bills) {
+            return `<div class="bills-section">
+                <div class="bills-section-hdr ${cls}"><i class="bi ${icon}"></i> ${title}</div>
+                <div class="bills-grid-cards">${bills.map(billCard).join('')}</div>
+            </div>`;
+        }
+
+        function billCard(b) {
+            const isOverdue = b.isOverdue || b.status === 2;
+            const isPaid = b.status === 1;
+            return `<div class="bill-card ${isOverdue?'urgent':''} ${isPaid?'paid':''}">
+                <div class="bill-card-ico ${isOverdue?'urgent':''} ${isPaid?'paid':''}"><i class="bi ${billCatIcons[b.category]||'bi-receipt'}"></i></div>
+                <div class="bill-card-info">
+                    <div class="bill-card-name">${b.name}</div>
+                    ${b.provider?`<div class="bill-card-provider">${b.provider}</div>`:''}
+                    <div class="bill-card-due ${isOverdue?'urgent':''}">${isOverdue?'⚠ Restantă din ':'Scadentă: '}${fmtDate(b.dueDate)}</div>
+                </div>
+                <div class="bill-card-right">
+                    <div class="bill-card-amount">${b.amount.toFixed(2)} RON</div>
+                    ${isPaid
+                        ? '<span class="badge badge-paid"><i class="bi bi-check-circle-fill"></i> Plătită</span>'
+                        : `<button class="btn btn-primary btn-xs" onclick="payBill(${b.id})"><i class="bi bi-credit-card"></i> Plătește</button>`}
+                    <button class="btn-icon danger" onclick="deleteBill(${b.id})"><i class="bi bi-trash"></i></button>
+                </div>
+            </div>`;
+        }
+
+        async function saveBill() {
+            const dto = { name: document.getElementById('billName').value, provider: document.getElementById('billProvider').value, amount: parseFloat(document.getElementById('billAmount').value), dueDate: new Date(document.getElementById('billDue').value).toISOString(), category: parseInt(document.getElementById('billCat').value), notes: document.getElementById('billNotes').value, bankAccountId: parseInt(document.getElementById('billAccount').value) };
+            const res = await authFetch('/api/bills', { method:'POST', body: JSON.stringify(dto) });
+            if (res.ok) { document.getElementById('addBillModal').style.display='none'; showToast('Factură adăugată!','success'); await loadBills(); }
+            else { const err = await res.json(); document.getElementById('billAlert').innerHTML=`<div class="alert alert-danger">${err.message}</div>`; }
+        }
+
+        async function payBill(id) {
+            if (!confirm('Plătești această factură? Suma va fi dedusă din cont.')) return;
+            const res = await authFetch('/api/bills/'+id+'/pay', {method:'POST'});
+            if (res.ok) { showToast('Factură plătită!','success'); await loadBills(); }
+            else { const err = await res.json(); showToast(err.message,'danger'); }
+        }
+
+        async function deleteBill(id) {
+            if (!confirm('Ștergeți factura?')) return;
+            const res = await authFetch('/api/bills/'+id, {method:'DELETE'});
+            if (res.ok) { showToast('Ștearsă.','success'); await loadBills(); }
+        }
+
+        function fmtDate(d) { return new Date(d).toLocaleDateString('ro-RO',{day:'numeric',month:'long',year:'numeric'}); }
+    </script>
+}

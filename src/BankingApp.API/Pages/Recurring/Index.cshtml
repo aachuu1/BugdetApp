@@ -1,0 +1,111 @@
+@page "/Recurring"
+@model BankingApp.API.Pages.Recurring.IndexModel
+@{
+    ViewData["Title"] = "Plăți Recurente";
+}
+
+<div class="page-shell">
+    <div class="page-hdr">
+        <div><h2>Plăți Recurente</h2><p>Plăți automate procesate zilnic la 08:00</p></div>
+        <button class="btn btn-primary btn-sm" onclick="document.getElementById('addRecurModal').style.display='flex'">
+            <i class="bi bi-plus"></i> Plată nouă
+        </button>
+    </div>
+    <div class="worker-banner"><i class="bi bi-robot"></i> Background worker rulează zilnic la <strong>08:00</strong> și procesează automat plățile scadente. <span id="nextInfo" style="margin-left:8px;opacity:0.8;"></span></div>
+    <div id="recurContent"><div class="loading-center"><div class="spinner"></div></div></div>
+</div>
+
+<div id="addRecurModal" style="display:none;" class="modal-backdrop" onclick="if(event.target===this)this.style.display='none'">
+    <div class="modal-box">
+        <div class="modal-hdr">
+            <h4><i class="bi bi-arrow-repeat" style="color:var(--purple-500)"></i> Plată recurentă nouă</h4>
+            <button class="btn-icon" onclick="document.getElementById('addRecurModal').style.display='none'"><i class="bi bi-x"></i></button>
+        </div>
+        <div class="modal-body">
+            <div id="recurAlert"></div>
+            <div class="field"><label>Nume *</label><div class="inp-wrap"><i class="bi bi-tag"></i><input type="text" id="recurName" placeholder="ex: Chirie lunară"></div></div>
+            <div class="field"><label>Beneficiar</label><div class="inp-wrap"><i class="bi bi-person"></i><input type="text" id="recurPayee"></div></div>
+            <div class="field"><label>Sumă (RON) *</label><div class="inp-wrap"><i class="bi bi-cash-coin"></i><input type="number" id="recurAmount" step="0.01" min="0.01"></div></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div class="field"><label>Frecvență</label><select id="recurFreq"><option value="0">Zilnic</option><option value="1">Săptămânal</option><option value="2" selected>Lunar</option><option value="3">Anual</option></select></div>
+                <div class="field"><label>Ziua lunii</label><input type="number" id="recurDay" value="1" min="1" max="28"></div>
+            </div>
+            <div class="field"><label>Categorie</label><select id="recurCat"><option value="8">Locuință</option><option value="3">Utilități</option><option value="5">Divertisment</option><option value="7">Educație</option><option value="9">Asigurări</option><option value="11">Altele</option></select></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div class="field"><label>Data start</label><input type="date" id="recurStart"></div>
+                <div class="field"><label>Data final (opț.)</label><input type="date" id="recurEnd"></div>
+            </div>
+            <div class="field"><label>Cont</label><select id="recurAccount"></select></div>
+        </div>
+        <div class="modal-ftr">
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('addRecurModal').style.display='none'">Anulează</button>
+            <button class="btn btn-primary btn-sm" onclick="saveRecurring()"><i class="bi bi-save"></i> Salvează</button>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const freqLabels = ['Zilnic','Săptămânal','Lunar','Anual'];
+        const catLabels = ['Salariu','Mâncare','Transport','Utilități','Sănătate','Divertisment','Shopping','Educație','Locuință','Asigurări','Economii','Altele'];
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            requireAuth();
+            document.getElementById('recurStart').value = new Date().toISOString().split('T')[0];
+            const now = new Date(); const next = new Date(now); next.setDate(now.getDate()+1); next.setHours(8,0,0,0);
+            document.getElementById('nextInfo').textContent = `Următoarea rulare: ${next.toLocaleDateString('ro-RO')} la 08:00`;
+            const res = await authFetch('/api/accounts');
+            const accs = await res.json();
+            document.getElementById('recurAccount').innerHTML = accs.map(a=>`<option value="${a.id}">${a.accountName}</option>`).join('');
+            await loadRecurring();
+        });
+
+        async function loadRecurring() {
+            const res = await authFetch('/api/recurring');
+            const payments = await res.json();
+            const c = document.getElementById('recurContent');
+            if (!payments.length) { c.innerHTML='<div class="empty-state"><i class="bi bi-arrow-repeat"></i><p>Nu ai plăți recurente configurate.</p></div>'; return; }
+            c.innerHTML = '<div class="recurring-list">' + payments.map(p=>`
+                <div class="recurring-card ${!p.isActive?'inactive':''}">
+                    <div class="rec-ico ${p.isActive?'active':''}"><i class="bi bi-arrow-repeat"></i></div>
+                    <div class="rec-info">
+                        <div class="rec-name">${p.name}${p.payeeName?` <span style="font-weight:400;color:var(--text2);font-size:12px;">→ ${p.payeeName}</span>`:''}</div>
+                        <div class="rec-meta">
+                            <span class="badge badge-info">${freqLabels[p.frequency]}</span>
+                            <span class="badge badge-auto">${catLabels[p.category]}</span>
+                            ${p.dayOfMonth?`<span style="font-size:11px;color:var(--text2)">ziua ${p.dayOfMonth}</span>`:''}
+                        </div>
+                        ${p.nextExecutionDate?`<div class="rec-next"><i class="bi bi-clock" style="font-size:11px"></i> Următoarea: ${fmtDate(p.nextExecutionDate)}</div>`:''}
+                    </div>
+                    <div class="rec-right">
+                        <div class="rec-amount">${p.amount.toFixed(2)} RON</div>
+                        <div class="rec-status ${p.isActive?'active':'inactive'}">${p.isActive?'Activ':'Inactiv'}</div>
+                        <div class="rec-actions">
+                            <button class="btn-icon ${p.isActive?'':'success'}" onclick="toggleRecurring(${p.id})" title="${p.isActive?'Dezactivează':'Activează'}"><i class="bi bi-${p.isActive?'pause-fill':'play-fill'}"></i></button>
+                            <button class="btn-icon danger" onclick="deleteRecurring(${p.id})"><i class="bi bi-trash"></i></button>
+                        </div>
+                    </div>
+                </div>`).join('') + '</div>';
+        }
+
+        async function saveRecurring() {
+            const dto = { name: document.getElementById('recurName').value, payeeName: document.getElementById('recurPayee').value, description: '', amount: parseFloat(document.getElementById('recurAmount').value), frequency: parseInt(document.getElementById('recurFreq').value), dayOfMonth: parseInt(document.getElementById('recurDay').value)||1, category: parseInt(document.getElementById('recurCat').value), startDate: new Date(document.getElementById('recurStart').value).toISOString(), endDate: document.getElementById('recurEnd').value ? new Date(document.getElementById('recurEnd').value).toISOString() : null, bankAccountId: parseInt(document.getElementById('recurAccount').value) };
+            const res = await authFetch('/api/recurring', {method:'POST', body: JSON.stringify(dto)});
+            if (res.ok) { document.getElementById('addRecurModal').style.display='none'; showToast('Plată recurentă adăugată!','success'); await loadRecurring(); }
+            else { const err = await res.json(); document.getElementById('recurAlert').innerHTML=`<div class="alert alert-danger">${err.message}</div>`; }
+        }
+
+        async function toggleRecurring(id) {
+            const res = await authFetch('/api/recurring/'+id+'/toggle', {method:'PATCH'});
+            if (res.ok) { showToast('Status actualizat.','success'); await loadRecurring(); }
+        }
+
+        async function deleteRecurring(id) {
+            if (!confirm('Ștergeți plata recurentă?')) return;
+            const res = await authFetch('/api/recurring/'+id, {method:'DELETE'});
+            if (res.ok) { showToast('Ștearsă.','success'); await loadRecurring(); }
+        }
+
+        function fmtDate(d) { return new Date(d).toLocaleDateString('ro-RO',{day:'numeric',month:'long',year:'numeric'}); }
+    </script>
+}

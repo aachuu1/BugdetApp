@@ -1,0 +1,69 @@
+@page "/Account/Login"
+@model BankingApp.API.Pages.Account.LoginModel
+@{
+    ViewData["Title"] = "Autentificare"; Layout = null;
+}
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Autentificare - BudgetFlow</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="~/css/site.css">
+</head>
+<body>
+    <div class="auth-wrap">
+        <div class="auth-card">
+            <div class="auth-logo">
+                <div class="brand-gem"><i class="bi bi-wallet2"></i></div>
+                <span style="font-size:16px;font-weight:700;color:var(--text)">BudgetFlow</span>
+            </div>
+            <div class="auth-title">Bine ai revenit 👋</div>
+            <div class="auth-sub">Autentifică-te în contul tău</div>
+            <div id="loginAlert"></div>
+            <div class="field">
+                <label>Email</label>
+                <div class="inp-wrap"><i class="bi bi-envelope"></i><input type="email" id="email" placeholder="email@exemplu.ro"></div>
+            </div>
+            <div class="field">
+                <label>Parolă</label>
+                <div class="inp-wrap"><i class="bi bi-lock"></i><input type="password" id="password" placeholder="Parola ta"></div>
+            </div>
+            <button class="btn btn-primary btn-w mt-2" onclick="doLogin()" id="loginBtn">
+                <i class="bi bi-box-arrow-in-right"></i> Autentifică-te
+            </button>
+            <div class="auth-footer">Nu ai cont? <a href="/Account/Register">Înregistrează-te gratuit</a></div>
+            <div class="demo-section">
+                <div class="demo-label">Conturi demo</div>
+                <div class="demo-pills">
+                    <div class="demo-pill" onclick="fillDemo('admin@bankingapp.com','Admin@123')"><i class="bi bi-shield-fill"></i> Admin</div>
+                    <div class="demo-pill" onclick="fillDemo('demo@bankingapp.com','Demo@123')"><i class="bi bi-person-fill"></i> Demo User</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => { if (localStorage.getItem('authToken')) window.location = '/Dashboard'; });
+        document.addEventListener('keypress', e => { if (e.key === 'Enter') doLogin(); });
+        async function doLogin() {
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+            const alertEl = document.getElementById('loginAlert');
+            const btn = document.getElementById('loginBtn');
+            if (!email || !password) { alertEl.innerHTML = '<div class="alert alert-danger">Completați toate câmpurile.</div>'; return; }
+            btn.disabled = true; btn.innerHTML = '<span class="spinner-sm"></span> Se autentifică...';
+            alertEl.innerHTML = '';
+            try {
+                const res = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) });
+                const data = await res.json();
+                if (res.ok) { localStorage.setItem('authToken', data.token); localStorage.setItem('authUser', JSON.stringify(data)); window.location = '/Dashboard'; }
+                else { alertEl.innerHTML = `<div class="alert alert-danger">${data.message || 'Date incorecte.'}</div>`; }
+            } catch (e) { alertEl.innerHTML = '<div class="alert alert-danger">Eroare de conexiune.</div>'; }
+            finally { btn.disabled = false; btn.innerHTML = '<i class="bi bi-box-arrow-in-right"></i> Autentifică-te'; }
+        }
+        function fillDemo(e, p) { document.getElementById('email').value = e; document.getElementById('password').value = p; }
+    </script>
+</body>
+</html>
