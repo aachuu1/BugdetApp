@@ -11,9 +11,11 @@
             <i class="bi bi-plus"></i> Factură nouă
         </button>
     </div>
+    <!-- bills are loaded here dynamically -->
     <div id="billsContent"><div class="loading-center"><div class="spinner"></div></div></div>
 </div>
 
+<!-- modal for adding a new bill -->
 <div id="addBillModal" style="display:none;" class="modal-backdrop" onclick="if(event.target===this)this.style.display='none'">
     <div class="modal-box">
         <div class="modal-hdr">
@@ -26,7 +28,22 @@
             <div class="field"><label>Furnizor</label><div class="inp-wrap"><i class="bi bi-building"></i><input type="text" id="billProvider" placeholder="ex: Electrica"></div></div>
             <div class="field"><label>Sumă (RON) *</label><div class="inp-wrap"><i class="bi bi-cash-coin"></i><input type="number" id="billAmount" placeholder="0.00" step="0.01"></div></div>
             <div class="field"><label>Data scadentă *</label><input type="date" id="billDue"></div>
-            <div class="field"><label>Categorie</label><select id="billCat"><option value="0">Electricitate</option><option value="1">Apă</option><option value="2">Gaz</option><option value="3">Internet</option><option value="4">Telefon</option><option value="5">Chirie</option><option value="6">Asigurare</option><option value="7">Abonament</option><option value="8">Altele</option></select></div>
+            <!-- category maps to the billcategory enum in the backend -->
+            <div class="field">
+                <label>Categorie</label>
+                <select id="billCat">
+                    <option value="0">Electricitate</option>
+                    <option value="1">Apă</option>
+                    <option value="2">Gaz</option>
+                    <option value="3">Internet</option>
+                    <option value="4">Telefon</option>
+                    <option value="5">Chirie</option>
+                    <option value="6">Asigurare</option>
+                    <option value="7">Abonament</option>
+                    <option value="8">Altele</option>
+                </select>
+            </div>
+            <!-- populated dynamically from the user's bank accounts -->
             <div class="field"><label>Cont</label><select id="billAccount"></select></div>
             <div class="field"><label>Notițe</label><textarea id="billNotes" rows="2"></textarea></div>
         </div>
@@ -39,15 +56,21 @@
 
 @section Scripts {
     <script>
+        // maps category enum values to display labels and bootstrap icons
         const billCatLabels = ['Electricitate','Apă','Gaz','Internet','Telefon','Chirie','Asigurare','Abonament','Altele'];
         const billCatIcons = ['bi-lightning-charge','bi-droplet','bi-fire','bi-wifi','bi-phone','bi-house','bi-shield-check','bi-play-circle','bi-receipt'];
 
         document.addEventListener('DOMContentLoaded', async () => {
-            requireAuth();
+            requireAuth(); // redirect to login if not authenticated
+
+            // default due date to 7 days from now
             document.getElementById('billDue').value = new Date(Date.now()+7*86400000).toISOString().split('T')[0];
+
+            // populate the account dropdown from the user's accounts
             const res = await authFetch('/api/accounts');
             const accs = await res.json();
             document.getElementById('billAccount').innerHTML = accs.map(a => `<option value="${a.id}">${a.accountName}</option>`).join('');
+
             await loadBills();
         });
 
@@ -59,10 +82,17 @@
 
         function renderBills(bills) {
             const c = document.getElementById('billsContent');
-            if (!bills.length) { c.innerHTML = '<div class="empty-state"><i class="bi bi-receipt-cutoff"></i><p>Nu ai facturi adăugate.</p></div>'; return; }
+
+            if (!bills.length) {
+                c.innerHTML = '<div class="empty-state"><i class="bi bi-receipt-cutoff"></i><p>Nu ai facturi adăugate.</p></div>';
+                return;
+            }
+
+            // split bills into three groups for display
             const overdue = bills.filter(b => b.isOverdue || b.status === 2);
             const pending = bills.filter(b => b.status === 0 && !b.isOverdue);
             const paid = bills.filter(b => b.status === 1);
+
             let html = '';
             if (overdue.length) html += section('urgent', 'bi-exclamation-triangle-fill', `Restante (${overdue.length})`, overdue);
             if (pending.length) html += section('pending', 'bi-clock', 'În așteptare', pending);
@@ -70,6 +100,7 @@
             c.innerHTML = html;
         }
 
+        // builds a section with a header and a grid of bill cards
         function section(cls, icon, title, bills) {
             return `<div class="bills-section">
                 <div class="bills-section-hdr ${cls}"><i class="bi ${icon}"></i> ${title}</div>
@@ -77,11 +108,14 @@
             </div>`;
         }
 
+        // builds a single bill card with pay and delete buttons
         function billCard(b) {
             const isOverdue = b.isOverdue || b.status === 2;
             const isPaid = b.status === 1;
             return `<div class="bill-card ${isOverdue?'urgent':''} ${isPaid?'paid':''}">
-                <div class="bill-card-ico ${isOverdue?'urgent':''} ${isPaid?'paid':''}"><i class="bi ${billCatIcons[b.category]||'bi-receipt'}"></i></div>
+                <div class="bill-card-ico ${isOverdue?'urgent':''} ${isPaid?'paid':''}">
+                    <i class="bi ${billCatIcons[b.category]||'bi-receipt'}"></i>
+                </div>
                 <div class="bill-card-info">
                     <div class="bill-card-name">${b.name}</div>
                     ${b.provider?`<div class="bill-card-provider">${b.provider}</div>`:''}
@@ -98,25 +132,75 @@
         }
 
         async function saveBill() {
-            const dto = { name: document.getElementById('billName').value, provider: document.getElementById('billProvider').value, amount: parseFloat(document.getElementById('billAmount').value), dueDate: new Date(document.getElementById('billDue').value).toISOString(), category: parseInt(document.getElementById('billCat').value), notes: document.getElementById('billNotes').value, bankAccountId: parseInt(document.getElementById('billAccount').value) };
+            const alertEl = document.getElementById('billAlert');
+            alertEl.innerHTML = '';
+
+            // collect and validate all form values before sending
+            const name = document.getElementById('billName').value.trim();
+            const amount = parseFloat(document.getElementById('billAmount').value);
+            const dueDate = document.getElementById('billDue').value;
+            const accountId = parseInt(document.getElementById('billAccount').value);
+
+            if (!name || name.length < 2) {
+                alertEl.innerHTML = '<div class="alert alert-danger">Numele facturii trebuie să aibă cel puțin 2 caractere.</div>';
+                return;
+            }
+            if (isNaN(amount) || amount <= 0) {
+                alertEl.innerHTML = '<div class="alert alert-danger">Suma trebuie să fie un număr pozitiv (minim 0.01 RON).</div>';
+                return;
+            }
+            if (amount > 1000000) {
+                alertEl.innerHTML = '<div class="alert alert-danger">Suma nu poate depăși 1.000.000 RON.</div>';
+                return;
+            }
+            if (!dueDate) {
+                alertEl.innerHTML = '<div class="alert alert-danger">Data scadenței este obligatorie.</div>';
+                return;
+            }
+            if (!accountId || isNaN(accountId)) {
+                alertEl.innerHTML = '<div class="alert alert-danger">Selectați un cont bancar.</div>';
+                return;
+            }
+
+            // build the request payload
+            const dto = {
+                name: name,
+                provider: document.getElementById('billProvider').value.trim(),
+                amount: amount,
+                dueDate: new Date(dueDate).toISOString(),
+                category: parseInt(document.getElementById('billCat').value),
+                notes: document.getElementById('billNotes').value.trim(),
+                bankAccountId: accountId
+            };
+
             const res = await authFetch('/api/bills', { method:'POST', body: JSON.stringify(dto) });
-            if (res.ok) { document.getElementById('addBillModal').style.display='none'; showToast('Factură adăugată!','success'); await loadBills(); }
-            else { const err = await res.json(); document.getElementById('billAlert').innerHTML=`<div class="alert alert-danger">${err.message}</div>`; }
+            if (res.ok) {
+                document.getElementById('addBillModal').style.display = 'none';
+                showToast('Factură adăugată!', 'success');
+                await loadBills();
+            } else {
+                const err = await res.json();
+                document.getElementById('billAlert').innerHTML = `<div class="alert alert-danger">${err.message}</div>`;
+            }
         }
 
         async function payBill(id) {
+            // confirm before deducting from account balance
             if (!confirm('Plătești această factură? Suma va fi dedusă din cont.')) return;
-            const res = await authFetch('/api/bills/'+id+'/pay', {method:'POST'});
-            if (res.ok) { showToast('Factură plătită!','success'); await loadBills(); }
-            else { const err = await res.json(); showToast(err.message,'danger'); }
+            const res = await authFetch('/api/bills/'+id+'/pay', { method:'POST' });
+            if (res.ok) { showToast('Factură plătită!', 'success'); await loadBills(); }
+            else { const err = await res.json(); showToast(err.message, 'danger'); }
         }
 
         async function deleteBill(id) {
             if (!confirm('Ștergeți factura?')) return;
-            const res = await authFetch('/api/bills/'+id, {method:'DELETE'});
-            if (res.ok) { showToast('Ștearsă.','success'); await loadBills(); }
+            const res = await authFetch('/api/bills/'+id, { method:'DELETE' });
+            if (res.ok) { showToast('Ștearsă.', 'success'); await loadBills(); }
         }
 
-        function fmtDate(d) { return new Date(d).toLocaleDateString('ro-RO',{day:'numeric',month:'long',year:'numeric'}); }
+        // format date helper
+        function fmtDate(d) {
+            return new Date(d).toLocaleDateString('ro-RO', { day:'numeric', month:'long', year:'numeric' });
+        }
     </script>
 }

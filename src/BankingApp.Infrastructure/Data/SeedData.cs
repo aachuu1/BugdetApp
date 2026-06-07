@@ -4,6 +4,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace BankingApp.Infrastructure.Data;
 
+// runs once at startup to ensure the database has the required roles and demo accounts
+// called from program.cs after migrations are applied
 public static class SeedData
 {
     public static async Task InitializeAsync(IServiceProvider services)
@@ -12,19 +14,30 @@ public static class SeedData
         var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
         var context = services.GetRequiredService<AppDbContext>();
 
+        // create the two roles if they don't already exist
         string[] roles = { "Admin", "User" };
         foreach (var role in roles)
             if (!await roleManager.RoleExistsAsync(role))
                 await roleManager.CreateAsync(new IdentityRole(role));
 
+        // create the demo admin account with a default bank account
         var adminEmail = "admin@bankingapp.com";
         if (await userManager.FindByEmailAsync(adminEmail) == null)
         {
-            var admin = new ApplicationUser { FirstName = "Admin", LastName = "System", Email = adminEmail, UserName = adminEmail, EmailConfirmed = true };
+            var admin = new ApplicationUser
+            {
+                FirstName = "Admin",
+                LastName = "System",
+                Email = adminEmail,
+                UserName = adminEmail,
+                EmailConfirmed = true // skip email confirmation for demo accounts
+            };
             var result = await userManager.CreateAsync(admin, "Admin@123");
             if (result.Succeeded)
             {
                 await userManager.AddToRoleAsync(admin, "Admin");
+
+                // create a default bank account for the admin
                 context.BankAccounts.Add(new BankAccount
                 {
                     AccountNumber = "RO49AAAA1B31007593840000",
@@ -38,14 +51,24 @@ public static class SeedData
             }
         }
 
+        // create the demo user account with realistic sample data
         var demoEmail = "demo@bankingapp.com";
         if (await userManager.FindByEmailAsync(demoEmail) == null)
         {
-            var demo = new ApplicationUser { FirstName = "Maria", LastName = "Ionescu", Email = demoEmail, UserName = demoEmail, EmailConfirmed = true };
+            var demo = new ApplicationUser
+            {
+                FirstName = "Maria",
+                LastName = "Ionescu",
+                Email = demoEmail,
+                UserName = demoEmail,
+                EmailConfirmed = true
+            };
             var result = await userManager.CreateAsync(demo, "Demo@123");
             if (result.Succeeded)
             {
                 await userManager.AddToRoleAsync(demo, "User");
+
+                // create the demo user's bank account first so we have the id for transactions
                 var acc = new BankAccount
                 {
                     AccountNumber = "RO49BBBB1B31007593840001",
@@ -58,22 +81,22 @@ public static class SeedData
                 context.BankAccounts.Add(acc);
                 await context.SaveChangesAsync();
 
-                // Seed some transactions
+                // add sample transactions spread over the last month to populate the dashboard
                 var now = DateTime.UtcNow;
                 var transactions = new List<Transaction>
                 {
-                    new() { Description = "Salariu", Amount = 5000, Type = Core.Enums.TransactionType.Income, Category = Core.Enums.TransactionCategory.Salary, Date = now.AddDays(-25), BankAccountId = acc.Id, BalanceAfter = 5000 },
-                    new() { Description = "Chirie", Amount = 1200, Type = Core.Enums.TransactionType.Expense, Category = Core.Enums.TransactionCategory.Housing, Date = now.AddDays(-20), BankAccountId = acc.Id, BalanceAfter = 3800 },
-                    new() { Description = "Cumpărături", Amount = 350, Type = Core.Enums.TransactionType.Expense, Category = Core.Enums.TransactionCategory.Food, Date = now.AddDays(-15), BankAccountId = acc.Id, BalanceAfter = 3450 },
-                    new() { Description = "Abonament Netflix", Amount = 45, Type = Core.Enums.TransactionType.Expense, Category = Core.Enums.TransactionCategory.Entertainment, Date = now.AddDays(-10), BankAccountId = acc.Id, BalanceAfter = 3405 },
-                    new() { Description = "Benzină", Amount = 200, Type = Core.Enums.TransactionType.Expense, Category = Core.Enums.TransactionCategory.Transport, Date = now.AddDays(-5), BankAccountId = acc.Id, BalanceAfter = 3205 },
-                    new() { Description = "Freelance", Amount = 1500, Type = Core.Enums.TransactionType.Income, Category = Core.Enums.TransactionCategory.Other, Date = now.AddDays(-3), BankAccountId = acc.Id, BalanceAfter = 4705 },
-                    new() { Description = "Restaurant", Amount = 120, Type = Core.Enums.TransactionType.Expense, Category = Core.Enums.TransactionCategory.Food, Date = now.AddDays(-2), BankAccountId = acc.Id, BalanceAfter = 4585 },
-                    new() { Description = "Farmacie", Amount = 85, Type = Core.Enums.TransactionType.Expense, Category = Core.Enums.TransactionCategory.Healthcare, Date = now.AddDays(-1), BankAccountId = acc.Id, BalanceAfter = 4500 },
+                    new() { Description = "Salariu",           Amount = 5000, Type = Core.Enums.TransactionType.Income,  Category = Core.Enums.TransactionCategory.Salary,        Date = now.AddDays(-25), BankAccountId = acc.Id, BalanceAfter = 5000 },
+                    new() { Description = "Chirie",            Amount = 1200, Type = Core.Enums.TransactionType.Expense, Category = Core.Enums.TransactionCategory.Housing,       Date = now.AddDays(-20), BankAccountId = acc.Id, BalanceAfter = 3800 },
+                    new() { Description = "Cumpărături",       Amount = 350,  Type = Core.Enums.TransactionType.Expense, Category = Core.Enums.TransactionCategory.Food,          Date = now.AddDays(-15), BankAccountId = acc.Id, BalanceAfter = 3450 },
+                    new() { Description = "Abonament Netflix", Amount = 45,   Type = Core.Enums.TransactionType.Expense, Category = Core.Enums.TransactionCategory.Entertainment, Date = now.AddDays(-10), BankAccountId = acc.Id, BalanceAfter = 3405 },
+                    new() { Description = "Benzină",           Amount = 200,  Type = Core.Enums.TransactionType.Expense, Category = Core.Enums.TransactionCategory.Transport,     Date = now.AddDays(-5),  BankAccountId = acc.Id, BalanceAfter = 3205 },
+                    new() { Description = "Freelance",         Amount = 1500, Type = Core.Enums.TransactionType.Income,  Category = Core.Enums.TransactionCategory.Other,         Date = now.AddDays(-3),  BankAccountId = acc.Id, BalanceAfter = 4705 },
+                    new() { Description = "Restaurant",        Amount = 120,  Type = Core.Enums.TransactionType.Expense, Category = Core.Enums.TransactionCategory.Food,          Date = now.AddDays(-2),  BankAccountId = acc.Id, BalanceAfter = 4585 },
+                    new() { Description = "Farmacie",          Amount = 85,   Type = Core.Enums.TransactionType.Expense, Category = Core.Enums.TransactionCategory.Healthcare,    Date = now.AddDays(-1),  BankAccountId = acc.Id, BalanceAfter = 4500 },
                 };
                 context.Transactions.AddRange(transactions);
 
-                // Seed recurring payments
+                // add a sample recurring payment to demonstrate the background worker feature
                 context.RecurringPayments.Add(new RecurringPayment
                 {
                     Name = "Chirie lunară",
@@ -86,15 +109,15 @@ public static class SeedData
                     IsActive = true,
                     PayeeName = "Proprietar",
                     BankAccountId = acc.Id,
-                    NextExecutionDate = new DateTime(now.Year, now.Month, 1).AddMonths(1)
+                    NextExecutionDate = new DateTime(now.Year, now.Month, 1).AddMonths(1) // first day of next month
                 });
 
-                // Seed bills
+                // add sample bills in different states: upcoming, overdue
                 context.Bills.AddRange(new List<Bill>
                 {
-                    new() { Name = "Factură Electricitate", Provider = "Electrica", Amount = 150, DueDate = now.AddDays(5), Category = Core.Enums.BillCategory.Electricity, BankAccountId = acc.Id },
-                    new() { Name = "Factură Internet", Provider = "RCS", Amount = 45, DueDate = now.AddDays(10), Category = Core.Enums.BillCategory.Internet, BankAccountId = acc.Id },
-                    new() { Name = "Factură Apă", Provider = "Apa Nova", Amount = 80, DueDate = now.AddDays(-2), Category = Core.Enums.BillCategory.Water, Status = Core.Enums.BillStatus.Overdue, BankAccountId = acc.Id },
+                    new() { Name = "Factură Electricitate", Provider = "Electrica", Amount = 150, DueDate = now.AddDays(5),  Category = Core.Enums.BillCategory.Electricity, BankAccountId = acc.Id },
+                    new() { Name = "Factură Internet",      Provider = "RCS",       Amount = 45,  DueDate = now.AddDays(10), Category = Core.Enums.BillCategory.Internet,     BankAccountId = acc.Id },
+                    new() { Name = "Factură Apă",           Provider = "Apa Nova",  Amount = 80,  DueDate = now.AddDays(-2), Category = Core.Enums.BillCategory.Water, Status = Core.Enums.BillStatus.Overdue, BankAccountId = acc.Id },
                 });
 
                 await context.SaveChangesAsync();

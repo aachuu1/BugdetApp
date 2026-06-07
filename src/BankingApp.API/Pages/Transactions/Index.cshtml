@@ -14,8 +14,24 @@
 
     <div class="filter-bar">
         <div class="inp-wrap" style="flex:1;min-width:160px;"><i class="bi bi-search"></i><input type="text" id="txSearch" placeholder="Caută descriere..."></div>
-        <select id="txType" style="width:130px;padding:7px 10px;font-size:12px;"><option value="">Toate tipurile</option><option value="0">Venituri</option><option value="1">Cheltuieli</option></select>
-        <select id="txCategory" style="width:140px;padding:7px 10px;font-size:12px;"><option value="">Toate categoriile</option><option value="0">Salariu</option><option value="1">Mâncare</option><option value="2">Transport</option><option value="3">Utilități</option><option value="4">Sănătate</option><option value="5">Divertisment</option><option value="6">Shopping</option><option value="7">Educație</option><option value="8">Locuință</option><option value="11">Altele</option></select>
+        <select id="txType" style="width:130px;padding:7px 10px;font-size:12px;">
+            <option value="">Toate tipurile</option>
+            <option value="0">Venituri</option>
+            <option value="1">Cheltuieli</option>
+        </select>
+        <select id="txCategory" style="width:140px;padding:7px 10px;font-size:12px;">
+            <option value="">Toate categoriile</option>
+            <option value="0">Salariu</option>
+            <option value="1">Mâncare</option>
+            <option value="2">Transport</option>
+            <option value="3">Utilități</option>
+            <option value="4">Sănătate</option>
+            <option value="5">Divertisment</option>
+            <option value="6">Shopping</option>
+            <option value="7">Educație</option>
+            <option value="8">Locuință</option>
+            <option value="11">Altele</option>
+        </select>
         <input type="date" id="txStartDate" style="width:140px;padding:7px 10px;font-size:12px;">
         <input type="date" id="txEndDate" style="width:140px;padding:7px 10px;font-size:12px;">
         <button class="btn btn-primary btn-sm" onclick="loadTx(1)"><i class="bi bi-funnel"></i> Filtrează</button>
@@ -28,7 +44,7 @@
     </div>
 </div>
 
-<!-- Modal -->
+<!-- modal adaugare tranzactie -->
 <div id="addTxModal" style="display:none;" class="modal-backdrop" onclick="if(event.target===this)this.style.display='none'">
     <div class="modal-box">
         <div class="modal-hdr">
@@ -47,7 +63,21 @@
             </div>
             <div class="field"><label>Descriere *</label><div class="inp-wrap"><i class="bi bi-text-left"></i><input type="text" id="txDesc" placeholder="ex: Cumpărături Kaufland"></div></div>
             <div class="field"><label>Sumă (RON) *</label><div class="inp-wrap"><i class="bi bi-cash-coin"></i><input type="number" id="txAmount" placeholder="0.00" min="0.01" step="0.01"></div></div>
-            <div class="field"><label>Categorie</label><select id="txCat"><option value="1">Mâncare</option><option value="2">Transport</option><option value="3">Utilități</option><option value="4">Sănătate</option><option value="5">Divertisment</option><option value="6">Shopping</option><option value="7">Educație</option><option value="8">Locuință</option><option value="0">Salariu</option><option value="11">Altele</option></select></div>
+            <div class="field">
+                <label>Categorie</label>
+                <select id="txCat">
+                    <option value="1">Mâncare</option>
+                    <option value="2">Transport</option>
+                    <option value="3">Utilități</option>
+                    <option value="4">Sănătate</option>
+                    <option value="5">Divertisment</option>
+                    <option value="6">Shopping</option>
+                    <option value="7">Educație</option>
+                    <option value="8">Locuință</option>
+                    <option value="0">Salariu</option>
+                    <option value="11">Altele</option>
+                </select>
+            </div>
             <div class="field"><label>Data</label><input type="date" id="txDate"></div>
             <div class="field"><label>Notițe</label><textarea id="txNotes" rows="2" placeholder="Opțional..."></textarea></div>
             <div class="field"><label>Cont</label><select id="txAccount"></select></div>
@@ -59,23 +89,66 @@
     </div>
 </div>
 
+<!-- modal pentru adaugat etichete la o tranzactie -->
+<div id="tagModal" style="display:none;" class="modal-backdrop" onclick="if(event.target===this)this.style.display='none'">
+    <div class="modal-box" style="max-width:420px;">
+        <div class="modal-hdr">
+            <h4><i class="bi bi-tags" style="color:var(--purple-500)"></i> Etichete tranzacție</h4>
+            <button class="btn-icon" onclick="document.getElementById('tagModal').style.display='none'"><i class="bi bi-x"></i></button>
+        </div>
+        <div class="modal-body">
+            <div id="tagModalCurrent" style="margin-bottom:12px;display:flex;flex-wrap:wrap;gap:6px;min-height:32px;"></div>
+            <div style="font-size:12px;color:#888;margin-bottom:8px;">Adaugă etichetă:</div>
+            <div id="tagModalAll" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+            <div id="tagModalEmpty" style="display:none;font-size:13px;color:#888;margin-top:8px;">
+                Nu ai etichete create. <a href="/Tags" style="color:var(--purple-500);">Creează una →</a>
+            </div>
+        </div>
+        <div class="modal-ftr">
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('tagModal').style.display='none'">Închide</button>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <script>
         const catLabels = ['Salariu','Mâncare','Transport','Utilități','Sănătate','Divertisment','Shopping','Educație','Locuință','Asigurări','Economii','Altele'];
         let txPage = 1;
+        let allTags = [];
+        let currentTagTxId = null;
 
         document.addEventListener('DOMContentLoaded', async () => {
             requireAuth();
             document.getElementById('txDate').value = new Date().toISOString().split('T')[0];
-            const res = await authFetch('/api/accounts');
-            const accs = await res.json();
-            document.getElementById('txAccount').innerHTML = accs.map(a => `<option value="${a.id}">${a.accountName} (${a.balance.toFixed(2)} RON)</option>`).join('');
+
+            const [accsRes, tagsRes] = await Promise.all([
+                authFetch('/api/accounts'),
+                authFetch('/api/tags')
+            ]);
+            const accs = await accsRes.json();
+            allTags = tagsRes.ok ? await tagsRes.json() : [];
+
+            document.getElementById('txAccount').innerHTML = accs.map(a =>
+                `<option value="${a.id}">${a.accountName} (${a.balance.toFixed(2)} RON)</option>`
+            ).join('');
+
             await loadTx(1);
+
+            document.getElementById('txSearch').addEventListener('keypress', e => {
+                if (e.key === 'Enter') loadTx(1);
+            });
         });
 
         async function loadTx(page) {
             txPage = page;
-            const params = new URLSearchParams({ page, pageSize: 15, search: document.getElementById('txSearch').value || '', type: document.getElementById('txType').value, category: document.getElementById('txCategory').value, startDate: document.getElementById('txStartDate').value || '', endDate: document.getElementById('txEndDate').value || '' });
+            const params = new URLSearchParams({
+                page, pageSize: 15,
+                search: document.getElementById('txSearch').value || '',
+                type: document.getElementById('txType').value,
+                category: document.getElementById('txCategory').value,
+                startDate: document.getElementById('txStartDate').value || '',
+                endDate: document.getElementById('txEndDate').value || ''
+            });
             document.getElementById('txContent').innerHTML = '<div class="loading-center"><div class="spinner"></div></div>';
             const res = await authFetch('/api/transactions?' + params);
             const data = await res.json();
@@ -84,51 +157,182 @@
 
         function renderTx(data) {
             const c = document.getElementById('txContent');
-            if (!data.items.length) { c.innerHTML = '<div class="empty-state"><i class="bi bi-arrows-left-right"></i><p>Nicio tranzacție găsită.</p></div>'; document.getElementById('txPagination').innerHTML=''; return; }
+            if (!data.items.length) {
+                c.innerHTML = '<div class="empty-state"><i class="bi bi-arrows-left-right"></i><p>Nicio tranzacție găsită.</p></div>';
+                document.getElementById('txPagination').innerHTML = '';
+                return;
+            }
+
             c.innerHTML = `<table class="data-table">
-                <thead><tr><th>Data</th><th>Descriere</th><th>Categorie</th><th>Tip</th><th>Sumă</th><th>Sold după</th><th></th></tr></thead>
+                <thead><tr><th>Data</th><th>Descriere</th><th>Categorie</th><th>Tip</th><th>Sumă</th><th>Sold după</th><th>Etichete</th><th></th></tr></thead>
                 <tbody>${data.items.map(t => `<tr>
                     <td class="td-muted">${fmtDate(t.date)}</td>
-                    <td><div class="td-desc">${t.description}${t.isRecurring?'<span class="badge badge-auto ms-1">AUTO</span>':''}</div>${t.notes?'<div class="td-sub">'+t.notes+'</div>':''}</td>
-                    <td><span class="badge badge-info">${catLabels[t.category]||t.categoryLabel}</span></td>
+                    <td>
+                        <div class="td-desc">${t.description}${t.isRecurring ? '<span class="badge badge-auto ms-1">AUTO</span>' : ''}</div>
+                        ${t.notes ? '<div class="td-sub">' + t.notes + '</div>' : ''}
+                    </td>
+                    <td><span class="badge badge-info">${catLabels[t.category] || t.categoryLabel}</span></td>
                     <td><span class="badge ${t.type===0?'badge-income':'badge-expense'}">${t.type===0?'Venit':'Cheltuială'}</span></td>
                     <td class="${t.type===0?'td-amount-in':'td-amount-out'}">${t.type===0?'+':'−'}${t.amount.toFixed(2)} RON</td>
                     <td class="td-muted">${t.balanceAfter.toFixed(2)} RON</td>
+                    <td>
+                        <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
+                            ${(t.tags||[]).map(tag =>
+                                `<span style="background:${tag.color}22;border:1px solid ${tag.color}55;color:${tag.color};border-radius:12px;padding:2px 8px;font-size:11px;font-weight:500;">${tag.name}</span>`
+                            ).join('')}
+                            <button onclick="openTagModal(${t.id}, ${JSON.stringify((t.tags||[]).map(tg=>tg.id)).replace(/"/g,"'")})"
+                                style="background:none;border:1px dashed #ccc;border-radius:12px;padding:2px 8px;font-size:11px;color:#888;cursor:pointer;">
+                                <i class="bi bi-tag"></i> ${(t.tags||[]).length ? '' : 'Adaugă'}
+                            </button>
+                        </div>
+                    </td>
                     <td><button class="btn-icon danger" onclick="deleteTx(${t.id})"><i class="bi bi-trash"></i></button></td>
-                </tr>`).join('')}</tbody></table>`;
+                </tr>`).join('')}</tbody>
+            </table>`;
+
             const p = document.getElementById('txPagination');
-            if (data.totalPages <= 1) { p.innerHTML=''; return; }
-            p.innerHTML = `<div class="pagination"><button class="page-btn" onclick="loadTx(${data.page-1})" ${!data.hasPrevious?'disabled':''}>«</button><span class="page-info">Pagina ${data.page} din ${data.totalPages} · ${data.totalCount} tranzacții</span><button class="page-btn" onclick="loadTx(${data.page+1})" ${!data.hasNext?'disabled':''}>»</button></div>`;
+            if (data.totalPages <= 1) { p.innerHTML = ''; return; }
+            p.innerHTML = `<div class="pagination">
+                <button class="page-btn" onclick="loadTx(${data.page-1})" ${!data.hasPrevious?'disabled':''}>«</button>
+                <span class="page-info">Pagina ${data.page} din ${data.totalPages} · ${data.totalCount} tranzacții</span>
+                <button class="page-btn" onclick="loadTx(${data.page+1})" ${!data.hasNext?'disabled':''}>»</button>
+            </div>`;
+        }
+
+        async function openTagModal(txId, currentTagIds) {
+            currentTagTxId = txId;
+
+            // reîncarcă tagurile de pe server
+            const res = await authFetch('/api/tags');
+            allTags = res.ok ? await res.json() : [];
+
+            // reîncarcă tranzacția pentru tagurile curente
+            const txRes = await authFetch('/api/transactions/' + txId);
+            const tx = txRes.ok ? await txRes.json() : null;
+            const activeTags = tx ? (tx.tags || []) : [];
+            const activeIds = activeTags.map(t => t.id);
+
+            renderTagModal(activeIds);
+            document.getElementById('tagModal').style.display = 'flex';
+        }
+
+        function renderTagModal(activeIds) {
+            const currentEl = document.getElementById('tagModalCurrent');
+            const allEl = document.getElementById('tagModalAll');
+            const emptyEl = document.getElementById('tagModalEmpty');
+
+            // etichete active pe tranzactie
+            const active = allTags.filter(t => activeIds.includes(t.id));
+            currentEl.innerHTML = active.length
+                ? active.map(tag => `
+                    <span style="display:inline-flex;align-items:center;gap:5px;background:${tag.color}22;border:1px solid ${tag.color}55;color:${tag.color};border-radius:14px;padding:3px 10px;font-size:12px;font-weight:500;">
+                        ${tag.name}
+                        <button onclick="removeTag(${tag.id}, ${activeIds.join(',')||0})"
+                            style="background:none;border:none;cursor:pointer;color:${tag.color};font-weight:700;font-size:13px;padding:0 2px;line-height:1;">×</button>
+                    </span>`).join('')
+                : '<span style="font-size:12px;color:#aaa;">Nicio etichetă adăugată.</span>';
+
+            // etichete disponibile (care nu sunt deja active)
+            const available = allTags.filter(t => !activeIds.includes(t.id));
+            if (allTags.length === 0) {
+                allEl.innerHTML = '';
+                emptyEl.style.display = 'block';
+            } else {
+                emptyEl.style.display = 'none';
+                allEl.innerHTML = available.length
+                    ? available.map(tag => `
+                        <button onclick="addTag(${tag.id})"
+                            style="background:${tag.color}11;border:1px solid ${tag.color}44;color:${tag.color};border-radius:14px;padding:3px 10px;font-size:12px;font-weight:500;cursor:pointer;">
+                            + ${tag.name}
+                        </button>`).join('')
+                    : '<span style="font-size:12px;color:#aaa;">Toate etichetele sunt deja adăugate.</span>';
+            }
+        }
+
+        async function addTag(tagId) {
+            const res = await authFetch(`/api/tags/${tagId}/transactions/${currentTagTxId}`, { method: 'POST' });
+            if (res.ok) {
+                showToast('Etichetă adăugată!', 'success');
+                await refreshTagModal();
+                await loadTx(txPage);
+            } else {
+                showToast('Eroare la adăugare.', 'danger');
+            }
+        }
+
+        async function removeTag(tagId) {
+            const res = await authFetch(`/api/tags/${tagId}/transactions/${currentTagTxId}`, { method: 'DELETE' });
+            if (res.ok) {
+                showToast('Etichetă eliminată.', 'success');
+                await refreshTagModal();
+                await loadTx(txPage);
+            } else {
+                showToast('Eroare la eliminare.', 'danger');
+            }
+        }
+
+        async function refreshTagModal() {
+            const txRes = await authFetch('/api/transactions/' + currentTagTxId);
+            const tx = txRes.ok ? await txRes.json() : null;
+            const activeIds = tx ? (tx.tags || []).map(t => t.id) : [];
+            renderTagModal(activeIds);
         }
 
         function setType(t) {
             document.getElementById('txTypeVal').value = t;
-            document.getElementById('btnExp').classList.toggle('active', t===1);
-            document.getElementById('btnInc').classList.toggle('active', t===0);
+            document.getElementById('btnExp').classList.toggle('active', t === 1);
+            document.getElementById('btnInc').classList.toggle('active', t === 0);
         }
 
         async function saveTx() {
+            const alertEl = document.getElementById('txAlert');
+            alertEl.innerHTML = '';
+
+            const desc = document.getElementById('txDesc').value.trim();
+            const amount = parseFloat(document.getElementById('txAmount').value);
+            const date = document.getElementById('txDate').value;
             const accountId = parseInt(document.getElementById('txAccount').value);
-            const dto = { description: document.getElementById('txDesc').value, amount: parseFloat(document.getElementById('txAmount').value), type: parseInt(document.getElementById('txTypeVal').value), category: parseInt(document.getElementById('txCat').value), date: new Date(document.getElementById('txDate').value).toISOString(), notes: document.getElementById('txNotes').value, bankAccountId: accountId };
-            const res = await authFetch('/api/transactions', { method:'POST', body: JSON.stringify(dto) });
-            if (res.ok) { document.getElementById('addTxModal').style.display='none'; showToast('Tranzacție adăugată!', 'success'); await loadTx(1); }
-            else { const err = await res.json(); document.getElementById('txAlert').innerHTML = `<div class="alert alert-danger">${err.message}</div>`; }
+
+            if (!desc || desc.length < 2) { alertEl.innerHTML = '<div class="alert alert-danger">Descrierea trebuie să aibă cel puțin 2 caractere.</div>'; return; }
+            if (isNaN(amount) || amount <= 0) { alertEl.innerHTML = '<div class="alert alert-danger">Suma trebuie să fie un număr pozitiv.</div>'; return; }
+            if (amount > 1000000) { alertEl.innerHTML = '<div class="alert alert-danger">Suma nu poate depăși 1.000.000 RON.</div>'; return; }
+            if (!date) { alertEl.innerHTML = '<div class="alert alert-danger">Data este obligatorie.</div>'; return; }
+            if (!accountId || isNaN(accountId)) { alertEl.innerHTML = '<div class="alert alert-danger">Selectați un cont bancar.</div>'; return; }
+
+            const dto = {
+                description: desc, amount, type: parseInt(document.getElementById('txTypeVal').value),
+                category: parseInt(document.getElementById('txCat').value),
+                date: new Date(date).toISOString(),
+                notes: document.getElementById('txNotes').value.trim(),
+                bankAccountId: accountId
+            };
+
+            const res = await authFetch('/api/transactions', { method: 'POST', body: JSON.stringify(dto) });
+            if (res.ok) {
+                document.getElementById('addTxModal').style.display = 'none';
+                showToast('Tranzacție adăugată!', 'success');
+                await loadTx(1);
+            } else {
+                const err = await res.json();
+                alertEl.innerHTML = `<div class="alert alert-danger">${err.message}</div>`;
+            }
         }
 
         async function deleteTx(id) {
             if (!confirm('Ștergeți tranzacția?')) return;
-            const res = await authFetch('/api/transactions/'+id, {method:'DELETE'});
-            if (res.ok) { showToast('Ștearsă.','success'); await loadTx(txPage); }
+            const res = await authFetch('/api/transactions/'+id, { method: 'DELETE' });
+            if (res.ok) { showToast('Ștearsă.', 'success'); await loadTx(txPage); }
         }
 
         function clearFilters() {
-            ['txSearch','txStartDate','txEndDate'].forEach(id => document.getElementById(id).value='');
-            document.getElementById('txType').selectedIndex=0;
-            document.getElementById('txCategory').selectedIndex=0;
+            ['txSearch','txStartDate','txEndDate'].forEach(id => document.getElementById(id).value = '');
+            document.getElementById('txType').selectedIndex = 0;
+            document.getElementById('txCategory').selectedIndex = 0;
             loadTx(1);
         }
 
-        function fmtDate(d) { return new Date(d).toLocaleDateString('ro-RO',{day:'numeric',month:'short',year:'numeric'}); }
-        document.addEventListener('DOMContentLoaded', () => { document.getElementById('txSearch').addEventListener('keypress', e => { if(e.key==='Enter') loadTx(1); }); });
+        function fmtDate(d) {
+            return new Date(d).toLocaleDateString('ro-RO', { day:'numeric', month:'short', year:'numeric' });
+        }
     </script>
 }

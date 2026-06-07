@@ -15,7 +15,7 @@
         </button>
     </div>
 
-    <!-- Hero balance card -->
+    <!-- hero card shows total balance and monthly summary -->
     <div id="heroCard">
         <div class="hero-card mb-3" style="margin-bottom:16px;">
             <div class="hero-label">Sold total</div>
@@ -38,7 +38,7 @@
         </div>
     </div>
 
-    <!-- Metric chips -->
+    <!-- quick summary chips -->
     <div class="metrics-row" style="margin-bottom:16px;">
         <div class="metric-chip">
             <div class="metric-chip-label">Sold disponibil</div>
@@ -54,7 +54,7 @@
         </div>
     </div>
 
-    <!-- Budget bar -->
+    <!-- budget progress bar, hidden if no budget is set -->
     <div class="card card-pad" id="budgetCard" style="margin-bottom:16px;display:none;">
         <div class="sec-title">Buget lunar</div>
         <div class="budget-section">
@@ -67,10 +67,9 @@
         </div>
     </div>
 
-    <!-- Two column grid -->
+    <!-- two column layout: recent transactions on the left, bills and accounts on the right -->
     <div class="dash-grid">
         <div class="dash-left">
-            <!-- Recent transactions -->
             <div class="card">
                 <div class="card-header">
                     <h3>Activitate recentă</h3>
@@ -82,7 +81,6 @@
             </div>
         </div>
         <div class="dash-right">
-            <!-- Facturi scadente -->
             <div class="card">
                 <div class="card-header">
                     <h3>Facturi scadente</h3>
@@ -92,7 +90,6 @@
                     <div class="loading-center"><div class="spinner"></div></div>
                 </div>
             </div>
-            <!-- Conturi -->
             <div class="card">
                 <div class="card-header"><h3>Conturile mele</h3></div>
                 <div style="padding:12px;" id="accountsPanel">
@@ -103,7 +100,7 @@
     </div>
 </div>
 
-<!-- Add Account Modal -->
+<!-- modal for adding a new bank account -->
 <div id="addAccountModal" style="display:none;" class="modal-backdrop" onclick="if(event.target===this)this.style.display='none'">
     <div class="modal-box">
         <div class="modal-hdr">
@@ -115,7 +112,15 @@
             <div class="field"><label>Nume cont *</label><div class="inp-wrap"><i class="bi bi-bank"></i><input type="text" id="accName" placeholder="ex: Cont Curent BRD"></div></div>
             <div class="field"><label>Sold inițial (RON)</label><div class="inp-wrap"><i class="bi bi-cash"></i><input type="number" id="accBalance" value="0" min="0" step="0.01"></div></div>
             <div class="field"><label>Buget lunar (RON)</label><div class="inp-wrap"><i class="bi bi-calendar-check"></i><input type="number" id="accBudget" value="0" min="0" step="0.01"></div></div>
-            <div class="field"><label>Tip cont</label><select id="accType"><option value="0">Cont curent</option><option value="1">Cont economii</option><option value="2">Card credit</option></select></div>
+            <!-- maps to the accounttype enum: 0=checking, 1=savings, 2=credit -->
+            <div class="field">
+                <label>Tip cont</label>
+                <select id="accType">
+                    <option value="0">Cont curent</option>
+                    <option value="1">Cont economii</option>
+                    <option value="2">Card credit</option>
+                </select>
+            </div>
         </div>
         <div class="modal-ftr">
             <button class="btn btn-ghost btn-sm" onclick="document.getElementById('addAccountModal').style.display='none'">Anulează</button>
@@ -126,13 +131,19 @@
 
 @section Scripts {
     <script>
-        document.addEventListener('DOMContentLoaded', async () => { requireAuth(); await loadDashboard(); });
+        document.addEventListener('DOMContentLoaded', async () => {
+            requireAuth(); // redirect to login if not authenticated
+            await loadDashboard();
+        });
 
         async function loadDashboard() {
             try {
+                // single api call that returns all dashboard data at once
                 const res = await authFetch('/api/transactions/dashboard');
                 if (res.status === 401) { logout(); return; }
                 const data = await res.json();
+
+                // render each section separately from the same data object
                 renderHero(data);
                 renderMetrics(data);
                 renderBudget(data);
@@ -144,8 +155,13 @@
 
         function renderHero(data) {
             document.getElementById('heroBalance').textContent = fmt(data.totalBalance) + ' RON';
+
+            // show the default account name in the hero card subtitle
             const defaultAcc = data.accounts.find(a => a.isDefault) || data.accounts[0];
-            document.getElementById('heroAcct').textContent = defaultAcc ? defaultAcc.accountName + ' · ' + formatAccNum(defaultAcc.accountNumber) : '';
+            document.getElementById('heroAcct').textContent = defaultAcc
+                ? defaultAcc.accountName + ' · ' + formatAccNum(defaultAcc.accountNumber)
+                : '';
+
             document.getElementById('heroIncome').textContent = '+' + fmt(data.monthlyIncome) + ' RON';
             document.getElementById('heroExpenses').textContent = '−' + fmt(data.monthlyExpenses) + ' RON';
             document.getElementById('heroSavings').textContent = '+' + fmt(data.monthlySavings) + ' RON';
@@ -153,17 +169,24 @@
         }
 
         function renderMetrics(data) {
+            // calculate remaining budget from all accounts combined
             const totalBudget = data.accounts.reduce((s, a) => s + a.monthlyBudget, 0);
             const budgetLeft = totalBudget - data.monthlyExpenses;
             document.getElementById('metBudget').textContent = fmt(budgetLeft) + ' RON';
+
+            // show red if over budget, green if under
             document.getElementById('metBudget').className = 'metric-chip-val ' + (budgetLeft < 0 ? 'red' : 'green');
             document.getElementById('metBills').textContent = data.pendingBillsCount + ' (' + fmt(data.pendingBillsAmount) + ' RON)';
         }
 
         function renderBudget(data) {
             const totalBudget = data.accounts.reduce((s, a) => s + a.monthlyBudget, 0);
+
+            // only show the budget card if a budget has been set
             if (totalBudget > 0) {
                 document.getElementById('budgetCard').style.display = 'block';
+
+                // cap the progress bar at 100% even if over budget
                 const pct = Math.min(data.budgetUsedPercent, 100);
                 document.getElementById('budgetFill').style.width = pct + '%';
                 document.getElementById('budgetPct').textContent = data.budgetUsedPercent + '%';
@@ -174,7 +197,12 @@
 
         function renderRecentTx(txs) {
             const c = document.getElementById('recentTx');
-            if (!txs.length) { c.innerHTML = '<div class="empty-state"><i class="bi bi-arrows-left-right"></i><p>Nicio tranzacție recentă.</p></div>'; return; }
+            if (!txs.length) {
+                c.innerHTML = '<div class="empty-state"><i class="bi bi-arrows-left-right"></i><p>Nicio tranzacție recentă.</p></div>';
+                return;
+            }
+
+            // type 0 = income (green, arrow down), type 1 = expense (red, arrow up)
             c.innerHTML = '<div class="tl-list">' + txs.map(t => `
                 <div class="tl-item">
                     <div class="tl-dot ${t.type===0?'in':'out'}"><i class="bi bi-arrow-${t.type===0?'down':'up'}"></i></div>
@@ -188,7 +216,10 @@
 
         function renderUpcomingBills(bills) {
             const c = document.getElementById('upcomingBills');
-            if (!bills.length) { c.innerHTML = '<div class="empty-state"><i class="bi bi-receipt"></i><p>Nicio factură scadentă în curând.</p></div>'; return; }
+            if (!bills.length) {
+                c.innerHTML = '<div class="empty-state"><i class="bi bi-receipt"></i><p>Nicio factură scadentă în curând.</p></div>';
+                return;
+            }
             c.innerHTML = '<div class="bill-list">' + bills.map(b => `
                 <div class="bill-row">
                     <div class="bill-ico ${b.isOverdue?'urgent':''}"><i class="bi bi-receipt"></i></div>
@@ -202,7 +233,12 @@
 
         function renderAccounts(accounts) {
             const c = document.getElementById('accountsPanel');
-            if (!accounts.length) { c.innerHTML = '<div class="empty-state"><p>Niciun cont adăugat.</p></div>'; return; }
+            if (!accounts.length) {
+                c.innerHTML = '<div class="empty-state"><p>Niciun cont adăugat.</p></div>';
+                return;
+            }
+
+            // first account gets the 'default' style, others get 'alt'
             c.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px;">' + accounts.map((a, i) => `
                 <div class="account-card ${i===0?'default':'alt'}" style="max-width:100%;min-width:unset;">
                     <div class="acc-type">${['Curent','Economii','Credit'][a.accountType]}</div>
@@ -213,14 +249,31 @@
         }
 
         async function saveAccount() {
-            const dto = { accountName: document.getElementById('accName').value, initialBalance: parseFloat(document.getElementById('accBalance').value)||0, monthlyBudget: parseFloat(document.getElementById('accBudget').value)||0, accountType: parseInt(document.getElementById('accType').value), currency: 'RON' };
+            const dto = {
+                accountName: document.getElementById('accName').value,
+                initialBalance: parseFloat(document.getElementById('accBalance').value) || 0,
+                monthlyBudget: parseFloat(document.getElementById('accBudget').value) || 0,
+                accountType: parseInt(document.getElementById('accType').value),
+                currency: 'RON'
+            };
             const res = await authFetch('/api/accounts', { method:'POST', body: JSON.stringify(dto) });
-            if (res.ok) { document.getElementById('addAccountModal').style.display='none'; showToast('Cont adăugat!', 'success'); await loadDashboard(); }
-            else { const err = await res.json(); document.getElementById('accAlert').innerHTML = `<div class="alert alert-danger">${err.message}</div>`; }
+            if (res.ok) {
+                document.getElementById('addAccountModal').style.display = 'none';
+                showToast('Cont adăugat!', 'success');
+                await loadDashboard();
+            } else {
+                const err = await res.json();
+                document.getElementById('accAlert').innerHTML = `<div class="alert alert-danger">${err.message}</div>`;
+            }
         }
 
-        function fmt(n) { return (n||0).toLocaleString('ro-RO', {minimumFractionDigits:2,maximumFractionDigits:2}); }
-        function fmtDate(d) { return new Date(d).toLocaleDateString('ro-RO',{day:'numeric',month:'short'}); }
+        // format number with romanian locale e.g. 1.234,56
+        function fmt(n) { return (n||0).toLocaleString('ro-RO', { minimumFractionDigits:2, maximumFractionDigits:2 }); }
+
+        // short date format e.g. "4 iun."
+        function fmtDate(d) { return new Date(d).toLocaleDateString('ro-RO', { day:'numeric', month:'short' }); }
+
+        // adds spaces every 4 characters for readability e.g. "RO49 BANK 1234 5678"
         function formatAccNum(n) { return (n||'').replace(/(.{4})/g,'$1 ').trim(); }
     </script>
 }

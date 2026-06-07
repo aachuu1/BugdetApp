@@ -1,9 +1,13 @@
 namespace BankingApp.Core.Enums;
 
+// stored as integers in the database instead of strings — more efficient and harder to misspell
+// checking = standard current account, savings = higher interest, credit = credit card
 public enum AccountType { Checking = 0, Savings = 1, Credit = 2 }
 
+// income adds to balance, expense deducts, transfer moves between accounts
 public enum TransactionType { Income = 0, Expense = 1, Transfer = 2 }
 
+// used for categorizing transactions in reports and the category breakdown chart
 public enum TransactionCategory
 {
     Salary = 0,
@@ -20,10 +24,13 @@ public enum TransactionCategory
     Other = 11
 }
 
+// controls how often the background worker executes a recurring payment
 public enum RecurringFrequency { Daily = 0, Weekly = 1, Monthly = 2, Yearly = 3 }
 
+// pending = not yet paid, paid = payment made, overdue = past due date, cancelled = no longer needed
 public enum BillStatus { Pending = 0, Paid = 1, Overdue = 2, Cancelled = 3 }
 
+// used for categorizing bills in the bills page
 public enum BillCategory
 {
     Electricity = 0,

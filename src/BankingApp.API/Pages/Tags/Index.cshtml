@@ -1,0 +1,176 @@
+﻿@page "/Tags"
+@model BankingApp.API.Pages.Tags.IndexModel
+@{
+    ViewData["Title"] = "Etichete";
+}
+
+<!-- page wrapper with header and react mount point -->
+<div class="page-shell">
+    <div class="page-hdr">
+        <div><h2>Etichete</h2><p>Gestionează etichetele tranzacțiilor (React SPA)</p></div>
+    </div>
+    <!-- react will mount the full tags UI into this div -->
+    <div id="tags-root"></div>
+</div>
+
+@section Scripts {
+    <!-- load react and react-dom from cdn, no build step needed -->
+    <script src="https://unpkg.com/react@@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@@18/umd/react-dom.development.js"></script>
+    <script>
+        (function() {
+            // use createElement directly since we have no jsx transpiler
+            const e = React.createElement;
+            const { useState, useEffect } = React;
+
+            // preset color palette for tag badges
+            const COLORS = ['#7F77DD','#1D9E75','#D85A30','#D4537E','#378ADD','#639922','#BA7517','#E24B4A'];
+
+            // renders a single tag as a colored pill with a delete button
+            function TagBadge({ tag, onDelete }) {
+                return e('span', {
+                    style: {
+                        display: 'inline-flex', alignItems: 'center', gap: 6,
+                        // use the tag color at low opacity for background and border
+                        background: tag.color + '22', border: '1px solid ' + tag.color + '55',
+                        color: tag.color, borderRadius: 20, padding: '4px 12px',
+                        fontSize: 13, fontWeight: 500
+                    }
+                },
+                    // small colored dot matching the tag color
+                    e('span', { style: { width: 8, height: 8, borderRadius: '50%', background: tag.color, display: 'inline-block' } }),
+                    tag.name,
+                    // show how many transactions use this tag
+                    e('span', { style: { marginLeft: 2, color: '#888', fontSize: 11 } }, '(' + tag.transactionCount + ')'),
+                    // delete button — calls parent handler with the tag id
+                    e('button', {
+                        onClick: () => onDelete(tag.id),
+                        style: { background: 'none', border: 'none', cursor: 'pointer', color: tag.color, fontWeight: 700, fontSize: 14, lineHeight: 1, padding: '0 2px' }
+                    }, '×')
+                );
+            }
+
+            // form for creating a new tag with a name and color picker
+            function TagForm({ onCreated }) {
+                const [name, setName] = useState('');
+                const [color, setColor] = useState('#7F77DD'); // default to first color in palette
+                const [error, setError] = useState('');
+                const [loading, setLoading] = useState(false);
+
+                async function handleSubmit(ev) {
+                    ev.preventDefault();
+                    // client-side validation before hitting the api
+                    if (!name.trim()) { setError('Numele este obligatoriu.'); return; }
+                    if (name.length > 50) { setError('Numele nu poate depăși 50 de caractere.'); return; }
+                    setError(''); setLoading(true);
+                    try {
+                        // jwt token stored in localStorage by the login page
+                        const token = localStorage.getItem('authToken');
+                        const res = await fetch('/api/tags', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                            body: JSON.stringify({ name: name.trim(), color })
+                        });
+                        if (res.ok) {
+                            // reset the name field and notify the parent with the new tag
+                            const tag = await res.json();
+                            setName('');
+                            onCreated(tag);
+                        } else {
+                            const err = await res.json();
+                            setError(err.message || 'Eroare.');
+                        }
+                    } catch {
+                        setError('Eroare de conexiune.');
+                    }
+                    finally { setLoading(false); }
+                }
+
+                return e('div', { style: { background: 'var(--color-background-secondary,#f5f5f5)', borderRadius: 10, padding: '16px 20px', marginBottom: 20 } },
+                    e('div', { style: { fontSize: 13, fontWeight: 500, marginBottom: 10, color: '#888' } }, 'Etichetă nouă'),
+                    e('form', { onSubmit: handleSubmit, style: { display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' } },
+                        // text input with inline validation error
+                        e('div', { style: { flex: 1, minWidth: 180 } },
+                            e('input', { type: 'text', value: name, onChange: ev => setName(ev.target.value), placeholder: 'Nume etichetă (ex: Vacanță)', style: { width: '100%' }, maxLength: 50 }),
+                            error && e('div', { style: { color: '#A32D2D', fontSize: 12, marginTop: 4 } }, error)
+                        ),
+                        // color picker — clicking a circle sets it as the selected color
+                        e('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' } },
+                            ...COLORS.map(c => e('div', {
+                                key: c, onClick: () => setColor(c),
+                                // thicker border on the selected color to indicate active state
+                                style: { width: 24, height: 24, borderRadius: '50%', background: c, cursor: 'pointer', border: color === c ? '3px solid #333' : '2px solid transparent', transition: 'border 0.15s' }
+                            }))
+                        ),
+                        // submit button is disabled while the request is in flight
+                        e('button', {
+                            type: 'submit', disabled: loading,
+                            style: { background: '#7F77DD', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 13, fontWeight: 500, cursor: loading ? 'not-allowed' : 'pointer' }
+                        }, loading ? 'Se salvează...' : '+ Adaugă')
+                    )
+                );
+            }
+
+            // root component — owns the tags list and handles loading, search, and delete
+            function TagsApp() {
+                const [tags, setTags] = useState([]);
+                const [loading, setLoading] = useState(true);
+                const [search, setSearch] = useState('');
+
+                // redirect to login if no token, otherwise fetch tags on mount
+                useEffect(() => {
+                    const token = localStorage.getItem('authToken');
+                    if (!token) { window.location = '/Account/Login'; return; }
+                    loadTags();
+                }, []);
+
+                async function loadTags() {
+                    setLoading(true);
+                    try {
+                        const token = localStorage.getItem('authToken');
+                        const res = await fetch('/api/tags', { headers: { 'Authorization': 'Bearer ' + token } });
+                        // token expired or invalid — send user back to login
+                        if (res.status === 401) { window.location = '/Account/Login'; return; }
+                        setTags(await res.json());
+                    } catch {}
+                    finally { setLoading(false); }
+                }
+
+                async function handleDelete(id) {
+                    if (!confirm('Ștergeți eticheta?')) return;
+                    const token = localStorage.getItem('authToken');
+                    const res = await fetch('/api/tags/' + id, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + token } });
+                    // remove from local state on success to avoid a full reload
+                    if (res.ok) setTags(prev => prev.filter(t => t.id !== id));
+                }
+
+                // filter client-side — no extra api call needed for search
+                const filtered = tags.filter(t => t.name.toLowerCase().includes(search.toLowerCase()));
+
+                return e('div', null,
+                    // tag form adds new tags directly to the list via the onCreated callback
+                    e(TagForm, { onCreated: tag => setTags(prev => [...prev, tag]) }),
+                    // search box filters the displayed tags without hitting the server
+                    e('div', { style: { marginBottom: 14 } },
+                        e('input', { type: 'text', placeholder: 'Caută etichetă...', value: search, onChange: ev => setSearch(ev.target.value), style: { width: '100%', maxWidth: 320 } })
+                    ),
+                    // three possible states: loading, empty, or the tag grid
+                    loading
+                        ? e('div', { style: { textAlign: 'center', padding: 40, color: '#888' } }, 'Se încarcă...')
+                        : filtered.length === 0
+                            // different empty message depending on whether a search is active
+                            ? e('div', { style: { textAlign: 'center', padding: 40, color: '#888' } }, search ? 'Nicio etichetă găsită.' : 'Nicio etichetă adăugată încă.')
+                            : e('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 10 } },
+                                ...filtered.map(tag => e(TagBadge, { key: tag.id, tag, onDelete: handleDelete }))
+                            ),
+                    // footer showing total count and usage hint
+                    e('div', { style: { marginTop: 20, fontSize: 12, color: '#888' } }, tags.length + ' etichete · Apasă × pentru a șterge')
+                );
+            }
+
+            // mount the react app into the placeholder div in the razor page
+            const root = ReactDOM.createRoot(document.getElementById('tags-root'));
+            root.render(e(TagsApp, null));
+        })();
+    </script>
+}

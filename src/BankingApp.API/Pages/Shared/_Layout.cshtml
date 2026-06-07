@@ -8,33 +8,40 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 </head>
 <body>
+    <!-- top navigation bar, hidden by default and shown by auth.js when user is logged in -->
     <nav class="topnav d-none" id="topnav">
         <a class="nav-brand" href="/Dashboard">
             <div class="brand-gem"><i class="bi bi-wallet2"></i></div>
             BudgetFlow
         </a>
+
+        <!-- main nav links, data-page is used by auth.js to highlight the active link -->
         <div class="nav-links">
             <a href="/Dashboard" class="nav-link" data-page="Dashboard"><i class="ti ti-layout-dashboard"></i><span>Dashboard</span></a>
             <a href="/Transactions" class="nav-link" data-page="Transactions"><i class="ti ti-arrows-left-right"></i><span>Tranzacții</span></a>
             <a href="/Bills" class="nav-link" data-page="Bills"><i class="ti ti-receipt"></i><span>Facturi</span></a>
             <a href="/Recurring" class="nav-link" data-page="Recurring"><i class="ti ti-refresh"></i><span>Recurente</span></a>
             <a href="/Reports" class="nav-link" data-page="Reports"><i class="ti ti-chart-bar"></i><span>Rapoarte</span></a>
+            <a href="/Tags" class="nav-link" data-page="Tags"><i class="ti ti-tag"></i><span>Etichete</span></a>
         </div>
+
+        <!-- user info and logout button, populated by auth.js from localstorage -->
         <div class="nav-right">
-            <div class="nav-avatar" id="navAvatar">MI</div>
+            <div class="nav-avatar" id="navAvatar">MI</div>   <!-- initials set by auth.js -->
             <span class="nav-user-name" id="navUserName"></span>
             <button class="nav-logout" onclick="logout()" title="Deconectare"><i class="bi bi-box-arrow-right"></i></button>
         </div>
     </nav>
 
+    <!-- razor pages render their content here -->
     <div id="pageBody">
         @RenderBody()
     </div>
 
+    <!-- bootstrap js, then auth and site scripts, then page-specific scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="~/js/auth.js" asp-append-version="true"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>

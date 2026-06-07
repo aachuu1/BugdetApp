@@ -1,7 +1,7 @@
 @page "/Account/Login"
 @model BankingApp.API.Pages.Account.LoginModel
 @{
-    ViewData["Title"] = "Autentificare"; Layout = null;
+    ViewData["Title"] = "Autentificare"; Layout = null; // no shared layout, this page is standalone
 }
 <!DOCTYPE html>
 <html lang="ro">
@@ -22,7 +22,10 @@
             </div>
             <div class="auth-title">Bine ai revenit 👋</div>
             <div class="auth-sub">Autentifică-te în contul tău</div>
+
+            <!-- alert area for error messages -->
             <div id="loginAlert"></div>
+
             <div class="field">
                 <label>Email</label>
                 <div class="inp-wrap"><i class="bi bi-envelope"></i><input type="email" id="email" placeholder="email@exemplu.ro"></div>
@@ -31,10 +34,14 @@
                 <label>Parolă</label>
                 <div class="inp-wrap"><i class="bi bi-lock"></i><input type="password" id="password" placeholder="Parola ta"></div>
             </div>
+
             <button class="btn btn-primary btn-w mt-2" onclick="doLogin()" id="loginBtn">
                 <i class="bi bi-box-arrow-in-right"></i> Autentifică-te
             </button>
+
             <div class="auth-footer">Nu ai cont? <a href="/Account/Register">Înregistrează-te gratuit</a></div>
+
+            <!-- quick fill buttons for demo accounts -->
             <div class="demo-section">
                 <div class="demo-label">Conturi demo</div>
                 <div class="demo-pills">
@@ -44,26 +51,64 @@
             </div>
         </div>
     </div>
+
     <script>
-        document.addEventListener('DOMContentLoaded', () => { if (localStorage.getItem('authToken')) window.location = '/Dashboard'; });
+        // if already logged in, skip the login page and go straight to dashboard
+        document.addEventListener('DOMContentLoaded', () => {
+            if (localStorage.getItem('authToken')) window.location = '/Dashboard';
+        });
+
+        // allow submitting the form with the enter key
         document.addEventListener('keypress', e => { if (e.key === 'Enter') doLogin(); });
+
         async function doLogin() {
             const email = document.getElementById('email').value.trim();
             const password = document.getElementById('password').value;
             const alertEl = document.getElementById('loginAlert');
             const btn = document.getElementById('loginBtn');
-            if (!email || !password) { alertEl.innerHTML = '<div class="alert alert-danger">Completați toate câmpurile.</div>'; return; }
-            btn.disabled = true; btn.innerHTML = '<span class="spinner-sm"></span> Se autentifică...';
+
+            // basic validation before hitting the api
+            if (!email || !password) {
+                alertEl.innerHTML = '<div class="alert alert-danger">Completați toate câmpurile.</div>';
+                return;
+            }
+
+            // disable button and show loading state while waiting
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-sm"></span> Se autentifică...';
             alertEl.innerHTML = '';
+
             try {
-                const res = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) });
+                const res = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
                 const data = await res.json();
-                if (res.ok) { localStorage.setItem('authToken', data.token); localStorage.setItem('authUser', JSON.stringify(data)); window.location = '/Dashboard'; }
-                else { alertEl.innerHTML = `<div class="alert alert-danger">${data.message || 'Date incorecte.'}</div>`; }
-            } catch (e) { alertEl.innerHTML = '<div class="alert alert-danger">Eroare de conexiune.</div>'; }
-            finally { btn.disabled = false; btn.innerHTML = '<i class="bi bi-box-arrow-in-right"></i> Autentifică-te'; }
+
+                if (res.ok) {
+                    // save jwt token and user info then redirect to dashboard
+                    localStorage.setItem('authToken', data.token);
+                    localStorage.setItem('authUser', JSON.stringify(data));
+                    window.location = '/Dashboard';
+                } else {
+                    // show error message returned by the api
+                    alertEl.innerHTML = `<div class="alert alert-danger">${data.message || 'Date incorecte.'}</div>`;
+                }
+            } catch (e) {
+                alertEl.innerHTML = '<div class="alert alert-danger">Eroare de conexiune.</div>';
+            } finally {
+                // always re-enable the button regardless of outcome
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-box-arrow-in-right"></i> Autentifică-te';
+            }
         }
-        function fillDemo(e, p) { document.getElementById('email').value = e; document.getElementById('password').value = p; }
+
+        // fills the email and password fields with the demo account credentials
+        function fillDemo(e, p) {
+            document.getElementById('email').value = e;
+            document.getElementById('password').value = p;
+        }
     </script>
 </body>
 </html>

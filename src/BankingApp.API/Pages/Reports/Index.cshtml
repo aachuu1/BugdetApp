@@ -9,25 +9,52 @@
         <div><h2>Rapoarte lunare</h2><p>Analiza cheltuielilor cu cache Redis</p></div>
     </div>
 
+    <!-- filter bar: account, year, month -->
     <div class="card card-pad" style="margin-bottom:16px;">
         <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
             <div class="field" style="margin:0;flex:1;min-width:160px;"><label>Cont</label><select id="reportAccount"></select></div>
             <div class="field" style="margin:0;"><label>An</label><select id="reportYear" style="width:90px;"></select></div>
-            <div class="field" style="margin:0;"><label>Lună</label><select id="reportMonth" style="width:120px;"><option value="1">Ianuarie</option><option value="2">Februarie</option><option value="3">Martie</option><option value="4">Aprilie</option><option value="5">Mai</option><option value="6">Iunie</option><option value="7">Iulie</option><option value="8">August</option><option value="9">Septembrie</option><option value="10">Octombrie</option><option value="11">Noiembrie</option><option value="12">Decembrie</option></select></div>
-            <button class="btn btn-primary btn-sm" onclick="loadReport(event)" style="margin-bottom:0;"><i class="bi bi-bar-chart-line"></i> Generează</button>
+            <div class="field" style="margin:0;">
+                <label>Lună</label>
+                <select id="reportMonth" style="width:120px;">
+                    <option value="1">Ianuarie</option>
+                    <option value="2">Februarie</option>
+                    <option value="3">Martie</option>
+                    <option value="4">Aprilie</option>
+                    <option value="5">Mai</option>
+                    <option value="6">Iunie</option>
+                    <option value="7">Iulie</option>
+                    <option value="8">August</option>
+                    <option value="9">Septembrie</option>
+                    <option value="10">Octombrie</option>
+                    <option value="11">Noiembrie</option>
+                    <option value="12">Decembrie</option>
+                </select>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="loadReport(event)" style="margin-bottom:0;">
+                <i class="bi bi-bar-chart-line"></i> Generează
+            </button>
         </div>
     </div>
 
+    <!-- report content, hidden until a report is generated -->
     <div id="reportContent" style="display:none;">
+
+        <!-- shows whether the report came from redis cache or was freshly calculated -->
         <div id="cacheBanner" class="cache-banner miss"></div>
 
+        <!-- summary metrics -->
         <div class="metrics-row" style="margin-bottom:16px;">
             <div class="metric-chip"><div class="metric-chip-label">Total venituri</div><div class="metric-chip-val green" id="rptIncome">—</div></div>
             <div class="metric-chip"><div class="metric-chip-label">Total cheltuieli</div><div class="metric-chip-val red" id="rptExpenses">—</div></div>
             <div class="metric-chip"><div class="metric-chip-label">Economii nete</div><div class="metric-chip-val purple" id="rptSavings">—</div></div>
         </div>
-        <div class="metric-chip" style="margin-bottom:16px;"><div class="metric-chip-label">Buget utilizat</div><div class="metric-chip-val" id="rptBudget">—</div></div>
+        <div class="metric-chip" style="margin-bottom:16px;">
+            <div class="metric-chip-label">Buget utilizat</div>
+            <div class="metric-chip-val" id="rptBudget">—</div>
+        </div>
 
+        <!-- two column layout: category breakdown and daily chart -->
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
             <div class="card card-pad">
                 <div class="sec-title">Cheltuieli pe categorie</div>
@@ -40,6 +67,7 @@
         </div>
     </div>
 
+    <!-- shown before any report is generated -->
     <div id="reportEmpty" class="empty-state">
         <i class="bi bi-bar-chart-line"></i>
         <p>Selectează un cont și o perioadă pentru a genera raportul.</p>
@@ -50,13 +78,23 @@
     <script>
         document.addEventListener('DOMContentLoaded', async () => {
             requireAuth();
+
+            // populate account dropdown from the api
             const res = await authFetch('/api/accounts');
             const accs = await res.json();
-            document.getElementById('reportAccount').innerHTML = accs.map(a=>`<option value="${a.id}">${a.accountName}</option>`).join('');
+            document.getElementById('reportAccount').innerHTML = accs.map(a =>
+                `<option value="${a.id}">${a.accountName}</option>`
+            ).join('');
+
+            // default to current month and year
             const now = new Date();
-            document.getElementById('reportMonth').value = now.getMonth()+1;
+            document.getElementById('reportMonth').value = now.getMonth() + 1;
+
+            // populate year dropdown going back 3 years
             const ys = document.getElementById('reportYear');
-            for (let y=now.getFullYear(); y>=now.getFullYear()-3; y--) ys.innerHTML+=`<option value="${y}">${y}</option>`;
+            for (let y = now.getFullYear(); y >= now.getFullYear() - 3; y--) {
+                ys.innerHTML += `<option value="${y}">${y}</option>`;
+            }
         });
 
         async function loadReport(e) {
@@ -64,59 +102,109 @@
             const year = document.getElementById('reportYear').value;
             const month = document.getElementById('reportMonth').value;
             if (!accountId) return;
-            document.getElementById('reportEmpty').style.display='none';
-            document.getElementById('reportContent').style.display='none';
+
+            // hide both sections while loading
+            document.getElementById('reportEmpty').style.display = 'none';
+            document.getElementById('reportContent').style.display = 'none';
+
             const btn = e.target.closest('button');
-            btn.disabled=true; btn.innerHTML='<span class="spinner-sm"></span> Se generează...';
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-sm"></span> Se generează...';
+
             try {
+                // url format: /api/reports/{accountId}/{year}/{month}
                 const res = await authFetch(`/api/reports/${accountId}/${year}/${month}`);
-                if (!res.ok) { const err=await res.json(); showToast(err.message,'danger'); return; }
+                if (!res.ok) {
+                    const err = await res.json();
+                    showToast(err.message, 'danger');
+                    return;
+                }
                 const r = await res.json();
                 renderReport(r);
-                document.getElementById('reportContent').style.display='block';
-            } catch(err) { showToast('Eroare.','danger'); }
-            finally { btn.disabled=false; btn.innerHTML='<i class="bi bi-bar-chart-line"></i> Generează'; }
+                document.getElementById('reportContent').style.display = 'block';
+            } catch(err) {
+                showToast('Eroare.', 'danger');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-bar-chart-line"></i> Generează';
+            }
         }
 
         function renderReport(r) {
+            // show a different banner depending on whether data came from redis or was calculated fresh
             const banner = document.getElementById('cacheBanner');
             if (r.fromCache) {
-                banner.className='cache-banner hit';
-                banner.innerHTML=`<i class="bi bi-lightning-charge-fill"></i> <strong>Din cache Redis</strong> — Raport servit instant (generat la ${new Date(r.generatedAt).toLocaleTimeString('ro-RO')})`;
+                banner.className = 'cache-banner hit';
+                banner.innerHTML = `<i class="bi bi-lightning-charge-fill"></i> <strong>Din cache Redis</strong> — Raport servit instant (generat la ${new Date(r.generatedAt).toLocaleTimeString('ro-RO')})`;
             } else {
-                banner.className='cache-banner miss';
-                banner.innerHTML=`<i class="bi bi-calculator"></i> <strong>Calculat acum</strong> — Salvat în Redis pentru ${r.monthName} ${r.year}. Următoarea cerere va fi instant.`;
+                banner.className = 'cache-banner miss';
+                banner.innerHTML = `<i class="bi bi-calculator"></i> <strong>Calculat acum</strong> — Salvat în Redis pentru ${r.monthName} ${r.year}. Următoarea cerere va fi instant.`;
             }
-            document.getElementById('rptIncome').textContent = r.totalIncome.toFixed(2)+' RON';
-            document.getElementById('rptExpenses').textContent = r.totalExpenses.toFixed(2)+' RON';
-            document.getElementById('rptSavings').textContent = r.netSavings.toFixed(2)+' RON';
-            document.getElementById('rptSavings').className='metric-chip-val '+(r.netSavings>=0?'green':'red');
-            document.getElementById('rptBudget').textContent = r.budgetUsedPercent+'%';
-            document.getElementById('rptBudget').className='metric-chip-val '+(r.budgetUsedPercent>100?'red':r.budgetUsedPercent>75?'':'purple');
 
+            // fill in the summary metrics
+            document.getElementById('rptIncome').textContent = r.totalIncome.toFixed(2) + ' RON';
+            document.getElementById('rptExpenses').textContent = r.totalExpenses.toFixed(2) + ' RON';
+            document.getElementById('rptSavings').textContent = r.netSavings.toFixed(2) + ' RON';
+
+            // color savings green if positive, red if negative
+            document.getElementById('rptSavings').className = 'metric-chip-val ' + (r.netSavings >= 0 ? 'green' : 'red');
+
+            // color budget red if over 100%, otherwise purple
+            document.getElementById('rptBudget').textContent = r.budgetUsedPercent + '%';
+            document.getElementById('rptBudget').className = 'metric-chip-val ' + (r.budgetUsedPercent > 100 ? 'red' : r.budgetUsedPercent > 75 ? '' : 'purple');
+
+            // render category breakdown bars
             const cb = document.getElementById('catBreakdown');
-            if (!r.categoryBreakdown.length) { cb.innerHTML='<div class="empty-state" style="padding:20px"><p>Nicio cheltuială.</p></div>'; }
-            else cb.innerHTML = r.categoryBreakdown.map(c=>`
-                <div class="cat-row">
-                    <div class="cat-dot" style="background:${c.color}"></div>
-                    <div class="cat-name">${c.category}</div>
-                    <div class="cat-track"><div class="cat-fill" style="width:${c.percentage}%;background:${c.color}"></div></div>
-                    <div class="cat-pct">${c.percentage}%</div>
-                    <div class="cat-amount">${c.amount.toFixed(2)} RON</div>
-                </div>`).join('');
+            if (!r.categoryBreakdown.length) {
+                cb.innerHTML = '<div class="empty-state" style="padding:20px"><p>Nicio cheltuială.</p></div>';
+            } else {
+                cb.innerHTML = r.categoryBreakdown.map(c => `
+                    <div class="cat-row">
+                        <div class="cat-dot" style="background:${c.color}"></div>
+                        <div class="cat-name">${c.category}</div>
+                        <div class="cat-track"><div class="cat-fill" style="width:${c.percentage}%;background:${c.color}"></div></div>
+                        <div class="cat-pct">${c.percentage}%</div>
+                        <div class="cat-amount">${c.amount.toFixed(2)} RON</div>
+                    </div>`).join('');
+            }
 
+            // render the daily expense bar chart
             const dc = document.getElementById('dailyChart');
-            if (!r.dailyBreakdown.length) { dc.innerHTML='<div class="empty-state" style="padding:20px"><p>Nu există date.</p></div>'; return; }
-            const max = Math.max(...r.dailyBreakdown.map(d=>d.amount));
-            const days = parseInt(document.getElementById('reportMonth').value);
-            const daysInMonth = new Date(parseInt(document.getElementById('reportYear').value||new Date().getFullYear()), days, 0).getDate();
-            const all = Array.from({length:daysInMonth},(_,i)=>{ const f=r.dailyBreakdown.find(d=>d.day===i+1); return {day:i+1,amount:f?f.amount:0}; });
-            dc.innerHTML=`<div style="display:flex;align-items:flex-end;gap:2px;height:240px;padding:0 4px;">${all.map(d=>{
-                const h=max>0?Math.round(d.amount/max*200):0;
-                return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;">
-                    <div title="Ziua ${d.day}: ${d.amount.toFixed(2)} RON" style="width:100%;height:${h}px;background:linear-gradient(to top,var(--pink-400),var(--purple-500));border-radius:3px 3px 0 0;cursor:pointer;transition:opacity 0.15s;" onmouseover="this.style.opacity=0.65" onmouseout="this.style.opacity=1"></div>
-                    ${d.day%5===0||d.day===1?`<div style="font-size:9px;color:var(--text3);margin-top:3px">${d.day}</div>`:'<div style="height:15px"></div>'}
-                </div>`}).join('')}</div>
+            if (!r.dailyBreakdown.length) {
+                dc.innerHTML = '<div class="empty-state" style="padding:20px"><p>Nu există date.</p></div>';
+                return;
+            }
+
+            const max = Math.max(...r.dailyBreakdown.map(d => d.amount));
+
+            // calculate how many days are in the selected month
+            const selectedMonth = parseInt(document.getElementById('reportMonth').value);
+            const daysInMonth = new Date(
+                parseInt(document.getElementById('reportYear').value || new Date().getFullYear()),
+                selectedMonth, 0
+            ).getDate();
+
+            // fill missing days with 0 so the chart always shows the full month
+            const all = Array.from({ length: daysInMonth }, (_, i) => {
+                const found = r.dailyBreakdown.find(d => d.day === i + 1);
+                return { day: i + 1, amount: found ? found.amount : 0 };
+            });
+
+            // build bar chart using css heights proportional to the max daily amount
+            dc.innerHTML = `
+                <div style="display:flex;align-items:flex-end;gap:2px;height:240px;padding:0 4px;">
+                    ${all.map(d => {
+                        const h = max > 0 ? Math.round(d.amount / max * 200) : 0;
+                        return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;">
+                            <div title="Ziua ${d.day}: ${d.amount.toFixed(2)} RON"
+                                 style="width:100%;height:${h}px;background:linear-gradient(to top,var(--pink-400),var(--purple-500));border-radius:3px 3px 0 0;cursor:pointer;transition:opacity 0.15s;"
+                                 onmouseover="this.style.opacity=0.65" onmouseout="this.style.opacity=1"></div>
+                            ${d.day % 5 === 0 || d.day === 1
+                                ? `<div style="font-size:9px;color:var(--text3);margin-top:3px">${d.day}</div>`
+                                : '<div style="height:15px"></div>'}
+                        </div>`;
+                    }).join('')}
+                </div>
                 <div style="text-align:center;font-size:11px;color:var(--text3);margin-top:4px">Zile din lună</div>`;
         }
     </script>
