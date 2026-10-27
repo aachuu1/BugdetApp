@@ -1,19 +1,19 @@
 # BudgetFlow
 
-Aplicație de banking pentru gestionarea bugetului lunar, construită cu ASP.NET Core 8, Entity Framework și Redis Cache.
+A banking application for managing a monthly budget, built with ASP.NET Core 8, Entity Framework and Redis Cache.
 
-## Funcționalități
+## Features
 
-- **Dashboard** cu statistici și grafice pentru cheltuieli și venituri
-- **Facturi** cu posibilitate de plată directă din cont
-- **Plăți recurente** procesate automat zilnic la 08:00 printr-un Background Worker
-- **Rapoarte lunare** cu cache Redis (TTL 1h) — UI-ul indică vizibil dacă datele vin din cache sau sunt calculate live
+- **Dashboard** with statistics and charts for expenses and income
+- **Bills** with the option to pay directly from the account
+- **Recurring payments** processed automatically every day at 08:00 by a Background Worker
+- **Monthly reports** with Redis cache (1h TTL) — the UI clearly indicates whether the data comes from the cache or is calculated live
 
 ---
 
-## Conturi demo
+## Demo Accounts
 
-| Email | Parolă | Rol |
+| Email | Password | Role |
 |---|---|---|
 | admin@bankingapp.com | Admin@123 | Admin |
 | demo@bankingapp.com | Demo@123 | User |
@@ -22,9 +22,9 @@ Aplicație de banking pentru gestionarea bugetului lunar, construită cu ASP.NET
 
 ## Setup
 
-### 1. Configurare connection string
+### 1. Configure the connection string
 
-Editează `src/BankingApp.API/appsettings.json`:
+Edit `src/BankingApp.API/appsettings.json`:
 
 ```json
 {
@@ -35,7 +35,7 @@ Editează `src/BankingApp.API/appsettings.json`:
 }
 ```
 
-### 2. Migrare bază de date
+### 2. Database migration
 
 ```powershell
 cd src/BankingApp.API
@@ -43,26 +43,26 @@ dotnet ef migrations add InitialCreate --project "../BankingApp.Infrastructure" 
 dotnet ef database update --project "../BankingApp.Infrastructure" --startup-project "."
 ```
 
-### 3. Redis (opțional)
+### 3. Redis (optional)
 
-Aplicația funcționează fără Redis — dacă nu e disponibil, rapoartele sunt calculate direct, fără cache.
+The application works without Redis — if it is not available, reports are calculated directly, without caching.
 
 ```bash
-# Cu Docker:
+# With Docker:
 docker run -d -p 6379:6379 redis
 ```
 
-### 4. Rulare
+### 4. Run
 
 ```bash
 dotnet run --project src/BankingApp.API
 ```
 
-Navighează la `https://localhost:5001`
+Navigate to `https://localhost:5001`
 
 ---
 
-## Arhitectură
+## Architecture
 
 ```
 BankingApp/
@@ -74,43 +74,43 @@ BankingApp/
 │   │   ├── Services/
 │   │   │   └── ReportService.cs   # Redis cache logic
 │   │   └── Workers/
-│   │       └── RecurringPaymentWorker.cs  # Background Worker (08:00 zilnic)
+│   │       └── RecurringPaymentWorker.cs  # Background Worker (daily at 08:00)
 │   └── BankingApp.API/            # Controllers, Razor Pages, wwwroot
 ```
 
 ---
 
-## Detalii tehnice
+## Technical Details
 
 ### Background Worker
 
-`RecurringPaymentWorker` extinde `BackgroundService` și rulează zilnic la 08:00:
+`RecurringPaymentWorker` extends `BackgroundService` and runs daily at 08:00:
 
-- procesează toate plățile recurente scadente
-- în prima zi a lunii, generează rapoartele pentru luna anterioară
+- processes all due recurring payments
+- on the first day of the month, generates the reports for the previous month
 
-Înregistrat în `Program.cs` cu `AddHostedService<RecurringPaymentWorker>()`.
+Registered in `Program.cs` with `AddHostedService<RecurringPaymentWorker>()`.
 
 ### Redis Cache
 
-`ReportService` cachează rapoartele lunare cu cheia `report:{accountId}:{year}:{month}` și un TTL de 1 oră.
+`ReportService` caches monthly reports with the key `report:{accountId}:{year}:{month}` and a TTL of 1 hour.
 
-- **Cache HIT** → răspuns instant, UI afișează banner verde *„Din cache Redis"*
-- **Cache MISS** → calcul live, salvare în Redis și DB, UI afișează banner mov *„Calculat acum"*
-- Dacă Redis nu e disponibil, aplicația continuă fără cache (fallback graceful, warning în log)
+- **Cache HIT** → instant response, the UI displays a green banner *"From Redis cache"*
+- **Cache MISS** → live calculation, saved to Redis and the DB, the UI displays a purple banner *"Calculated now"*
+- If Redis is not available, the application continues without cache (graceful fallback, warning in the log)
 
 ---
 
-## Pachete NuGet
+## NuGet Packages
 
 ### BankingApp.Core
-| Pachet | Versiune |
+| Package | Version |
 |---|---|
 | Microsoft.AspNetCore.Identity.EntityFrameworkCore | 8.0.11 |
 | Microsoft.EntityFrameworkCore | 8.0.11 |
 
 ### BankingApp.Infrastructure
-| Pachet | Versiune |
+| Package | Version |
 |---|---|
 | Microsoft.AspNetCore.Identity.EntityFrameworkCore | 8.0.11 |
 | Microsoft.EntityFrameworkCore.SqlServer | 8.0.11 |
@@ -122,7 +122,7 @@ BankingApp/
 | StackExchange.Redis | 2.8.16 |
 
 ### BankingApp.API
-| Pachet | Versiune |
+| Package | Version |
 |---|---|
 | Microsoft.AspNetCore.Authentication.JwtBearer | 8.0.11 |
 | Microsoft.EntityFrameworkCore.Design | 8.0.11 |
